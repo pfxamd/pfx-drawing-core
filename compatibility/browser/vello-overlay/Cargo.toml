@@ -1,0 +1,16 @@
+[package]
+name = "pfx_vello_overlay"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+vello_cpu = { path = "../../vello/vello_cpu" }
+wasm-bindgen = "=0.2.115"
+
+[profile.release]
+opt-level = 3
+lto = "thin"

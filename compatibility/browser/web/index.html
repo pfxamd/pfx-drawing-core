@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PFx Drawing Core — source browser composition test</title>
+<style>
+html,body{margin:0;padding:0;overflow:hidden;background:#071824;font:14px system-ui,sans-serif}
+#viewport{position:relative;width:800px;height:500px;background:#001a33}
+canvas{position:absolute;top:0;left:0;width:800px;height:500px}
+#hud{pointer-events:none}
+#status{position:absolute;top:60px;left:32px;color:white;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="viewport">
+  <canvas id="gpu" width="800" height="500"></canvas>
+  <canvas id="hud" width="800" height="500"></canvas>
+  <div id="status">PFx SOURCE COMPOSITION — FILAMENT 3D + VELLO 2D</div>
+</div>
+<script src="./filament.js"></script>
+<script type="module" src="./compose.js"></script>
+</body>
+</html>
