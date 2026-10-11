@@ -93,6 +93,7 @@ jobs:
           export EMSDK="$RUNNER_TEMP/emsdk"
           source "$EMSDK/emsdk_env.sh"
           cd "$RUNNER_TEMP/filament"
+          export CC=clang CXX=clang++
           export CMAKE_BUILD_PARALLEL_LEVEL=2
           /usr/bin/time -v -o "$GITHUB_WORKSPACE/artifacts/filament-wasm-time.txt" \
             ./build.sh -p wasm release \
