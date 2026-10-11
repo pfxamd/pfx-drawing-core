@@ -157,23 +157,37 @@ jobs:
             python3 tools/git-sync-deps 2>&1 | tee "$GITHUB_WORKSPACE/artifacts/skia-sync.log"
           python3 bin/fetch-ninja
           clang++ --version | head -1
-      - name: Build native Skia software raster source and verify pixels
+      - name: Build native Skia with its transitive GN dependencies and verify pixels
         shell: bash
         run: |
           set -euxo pipefail
           cd "$RUNNER_TEMP/skia"
+          # Place an ephemeral executable in Skia's OWN GN graph, so
+          # partition_alloc, codecs and the rest of its dependencies link.
+          mkdir -p pfx_probe
+          cp "$GITHUB_WORKSPACE/compatibility/probes/skia-cpu.cpp" pfx_probe/pfx_compat.cpp
+          cat > pfx_probe/BUILD.gn <<'GN'
+          executable("pfx_cpu") {
+            sources = [ "pfx_compat.cpp" ]
+            include_dirs = [ "//" ]
+            deps = [ "//:skia" ]
+          }
+          GN
+          cat >> BUILD.gn <<'GN'
+          group("pfx_compat") {
+            deps = [ "//pfx_probe:pfx_cpu" ]
+          }
+          GN
           /usr/bin/time -v -o "$GITHUB_WORKSPACE/artifacts/skia-configure-time.txt" \
             bin/gn gen out/pfx --args='is_debug=false is_official_build=true skia_enable_gpu=false skia_use_harfbuzz=false skia_use_icu=false skia_use_libpng=false skia_use_libjpeg_turbo=false skia_use_libwebp=false cc="clang" cxx="clang++"' \
               2>&1 | tee "$GITHUB_WORKSPACE/artifacts/skia-configure.log"
           /usr/bin/time -v -o "$GITHUB_WORKSPACE/artifacts/skia-build-time.txt" \
-            ninja -C out/pfx skia -j 2 2>&1 | tee "$GITHUB_WORKSPACE/artifacts/skia-build.log"
-          clang++ -std=c++20 -O2 -I. \
-            "$GITHUB_WORKSPACE/compatibility/probes/skia-cpu.cpp" \
-            out/pfx/libskia.a -ldl -pthread -lm -ljpeg -lwebp -lfreetype -lfontconfig -lpng -lexpat -lz \
-            -o "$GITHUB_WORKSPACE/artifacts/skia-cpu-probe"
+            ninja -C out/pfx pfx_compat -j 2 \
+              2>&1 | tee "$GITHUB_WORKSPACE/artifacts/skia-build.log"
+          test -s out/pfx/libskia.a
+          test -x out/pfx/pfx_cpu
           PFX_OUTPUT="$GITHUB_WORKSPACE/artifacts/skia-cpu.ppm" \
-            "$GITHUB_WORKSPACE/artifacts/skia-cpu-probe" \
-            2>&1 | tee "$GITHUB_WORKSPACE/artifacts/skia-native.log"
+            out/pfx/pfx_cpu 2>&1 | tee "$GITHUB_WORKSPACE/artifacts/skia-native.log"
           test -s "$GITHUB_WORKSPACE/artifacts/skia-cpu.ppm"
       - name: Retain Skia evidence
         if: always()
