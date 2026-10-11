@@ -25,7 +25,6 @@ int main() {
  paint.setAntiAlias(true);
  auto start=std::chrono::steady_clock::now();
  canvas->drawRect(SkRect::MakeLTRB(50,20,250,160),paint);
- surface->flushAndSubmit();
  auto ns=std::chrono::duration_cast<std::chrono::nanoseconds>(
     std::chrono::steady_clock::now()-start).count();
  SkPixmap pm;

@@ -169,7 +169,7 @@ jobs:
             ninja -C out/pfx skia -j 2 2>&1 | tee "$GITHUB_WORKSPACE/artifacts/skia-build.log"
           clang++ -std=c++20 -O2 -I. \
             "$GITHUB_WORKSPACE/compatibility/probes/skia-cpu.cpp" \
-            out/pfx/libskia.a -ldl -pthread -lm -lz \
+            out/pfx/libskia.a -ldl -pthread -lm -ljpeg -lwebp -lfreetype -lfontconfig -lpng -lexpat -lz \
             -o "$GITHUB_WORKSPACE/artifacts/skia-cpu-probe"
           PFX_OUTPUT="$GITHUB_WORKSPACE/artifacts/skia-cpu.ppm" \
             "$GITHUB_WORKSPACE/artifacts/skia-cpu-probe" \
