@@ -1,0 +1,168 @@
+name: Browser source composition - Vello 2D + Filament 3D
+on:
+  push:
+    branches:
+      - experiment/browser-integration
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vello-wasm-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin Vello source and prepare Rust WebAssembly toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/linebender/vello.git "$RUNNER_TEMP/vello"
+          git -C "$RUNNER_TEMP/vello" fetch --depth=1 origin 235739c4f08eb48d900e1512459d453a9ab77f96
+          git -C "$RUNNER_TEMP/vello" checkout --detach 235739c4f08eb48d900e1512459d453a9ab77f96
+          test "$(git -C "$RUNNER_TEMP/vello" rev-parse HEAD)" = "235739c4f08eb48d900e1512459d453a9ab77f96"
+          cp -a compatibility/browser/vello-overlay "$RUNNER_TEMP/overlay"
+          rustup target add wasm32-unknown-unknown
+          mkdir -p artifacts/web
+          rustc --version
+      - name: Build actual Vello CPU source into browser WebAssembly
+        shell: bash
+        run: |
+          set -euxo pipefail
+          /usr/bin/time -v -o artifacts/vello-cpu-wasm-time.txt \
+            cargo build --manifest-path "$RUNNER_TEMP/overlay/Cargo.toml" \
+              --release --target wasm32-unknown-unknown \
+              2>&1 | tee artifacts/vello-cpu-wasm.log
+          test -s "$RUNNER_TEMP/overlay/target/wasm32-unknown-unknown/release/pfx_vello_overlay.wasm"
+      - name: Generate browser bindings from source-built WebAssembly
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cargo install wasm-bindgen-cli --version 0.2.115 --locked --root "$RUNNER_TEMP/bindgen"
+          "$RUNNER_TEMP/bindgen/bin/wasm-bindgen" \
+            "$RUNNER_TEMP/overlay/target/wasm32-unknown-unknown/release/pfx_vello_overlay.wasm" \
+            --target web --out-dir artifacts/web \
+            --out-name pfx_vello_overlay
+          test -s artifacts/web/pfx_vello_overlay.js
+          test -s artifacts/web/pfx_vello_overlay_bg.wasm
+      - name: Save source-built Vello browser artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-source-browser-vello
+          path: artifacts/
+          if-no-files-found: ignore
+
+  filament-wasm-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host source-build requirements
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang libc++-dev libc++abi-dev libglu1-mesa-dev \
+            libxi-dev libxcomposite-dev libxxf86vm-dev ninja-build cmake python3 curl git
+          mkdir -p artifacts/web
+      - name: Pin original Filament source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/google/filament.git "$RUNNER_TEMP/filament"
+          git -C "$RUNNER_TEMP/filament" fetch --depth=1 origin 764fe6cac9bdb4ba24d3d852344dfa04a5f70f75
+          git -C "$RUNNER_TEMP/filament" checkout --detach 764fe6cac9bdb4ba24d3d852344dfa04a5f70f75
+          test "$(git -C "$RUNNER_TEMP/filament" rev-parse HEAD)" = "764fe6cac9bdb4ba24d3d852344dfa04a5f70f75"
+      - name: Install pinned Emscripten SDK for source WASM build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --depth=1 --branch 5.0.4 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          cd "$RUNNER_TEMP/emsdk"
+          ./emsdk install 5.0.4
+          ./emsdk activate 5.0.4
+          source ./emsdk_env.sh
+          emcc --version | head -3
+      - name: Build real Filament browser renderer and triangle material FROM SOURCE
+        shell: bash
+        run: |
+          set -euxo pipefail
+          export EMSDK="$RUNNER_TEMP/emsdk"
+          source "$EMSDK/emsdk_env.sh"
+          cd "$RUNNER_TEMP/filament"
+          export CMAKE_BUILD_PARALLEL_LEVEL=2
+          /usr/bin/time -v -o "$GITHUB_WORKSPACE/artifacts/filament-wasm-time.txt" \
+            ./build.sh -p wasm release \
+            2>&1 | tee "$GITHUB_WORKSPACE/artifacts/filament-wasm.log"
+          find out -type f \( -name filament.js -o -name filament.wasm -o -name triangle.filamat \) \
+            | tee "$GITHUB_WORKSPACE/artifacts/filament-generated-paths.txt"
+          js="$(find out -type f -name filament.js | grep '/web/examples/' | head -1 || true)"
+          wasm="$(find out -type f -name filament.wasm | grep '/web/examples/' | head -1 || true)"
+          material="$(find out -type f -name triangle.filamat | head -1 || true)"
+          if [[ -z "$js" || -z "$wasm" || -z "$material" ]]; then
+            echo "Source build succeeded but browser example files could not be located" >&2
+            exit 1
+          fi
+          cp "$js" "$GITHUB_WORKSPACE/artifacts/web/filament.js"
+          cp "$wasm" "$GITHUB_WORKSPACE/artifacts/web/filament.wasm"
+          cp "$material" "$GITHUB_WORKSPACE/artifacts/web/triangle.filamat"
+          test -s "$GITHUB_WORKSPACE/artifacts/web/filament.wasm"
+      - name: Save source-built Filament browser artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-source-browser-filament
+          path: artifacts/
+          if-no-files-found: ignore
+
+  browser-composition:
+    needs: [vello-wasm-source, filament-wasm-source]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: pfx-source-browser-vello
+          path: artifacts/vello
+      - uses: actions/download-artifact@v4
+        with:
+          name: pfx-source-browser-filament
+          path: artifacts/filament
+      - name: Assemble browser test using only source-built engines
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p artifacts/browser/web artifacts/browser/proof
+          cp compatibility/browser/web/* artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_overlay.js artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_overlay_bg.wasm artifacts/browser/web/
+          cp artifacts/filament/web/filament.js artifacts/browser/web/
+          cp artifacts/filament/web/filament.wasm artifacts/browser/web/
+          cp artifacts/filament/web/triangle.filamat artifacts/browser/web/
+          node --version
+          npm install --no-save playwright@1.56.1 pngjs@7.0.0
+          npx playwright install --with-deps chromium
+      - name: Render actual WebGL2 + WASM canvas composition in Chromium
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/browser/web" \
+          PFX_SCREENSHOT="$GITHUB_WORKSPACE/artifacts/browser/proof/composition.png" \
+          PFX_REPORT="$GITHUB_WORKSPACE/artifacts/browser/proof/composition.json" \
+            node compatibility/browser/test-composition.cjs
+          test -s artifacts/browser/proof/composition.png
+          test -s artifacts/browser/proof/composition.json
+      - name: Retain real browser screenshot and measurable evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-source-browser-composition
+          path: artifacts/browser/proof
+          if-no-files-found: ignore
