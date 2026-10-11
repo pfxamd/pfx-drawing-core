@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Source-built Vello browser proof</title>
+<style>html,body{margin:0;width:800px;height:500px;background:#061624;color:#fff;font:14px system-ui,sans-serif;overflow:hidden}canvas{position:absolute;inset:0}#label{position:absolute;left:35px;top:68px;pointer-events:none}#status{position:absolute;left:35px;bottom:30px;pointer-events:none}</style></head>
+<body><canvas id="drawing" width="800" height="500"></canvas><div id="label">PFx Drawing Core — Vello CPU source-built WebAssembly</div><div id="status">Initializing</div>
+<script type="module">
+import init, {render_overlay} from './pfx_vello_overlay.js';
+window.PFX_PROOF={ok:false,errors:[]};
+try {
+ await init();
+ const raw=render_overlay(800,500);
+ if(raw.length!==800*500*4)throw Error('Incorrect pixel buffer');
+ const canvas=document.getElementById('drawing');
+ const ctx=canvas.getContext('2d',{willReadFrequently:true});
+ ctx.putImageData(new ImageData(new Uint8ClampedArray(raw),800,500),0,0);
+ const color=(x,y)=>Array.from(ctx.getImageData(x,y,1,1).data);
+ const white=color(40,26),magenta=color(100,47),transparent=color(400,250);
+ if(white.some(v=>v!==255))throw Error('Expected opaque white line');
+ if(magenta[0]!==255||magenta[1]!==0||magenta[2]!==255||magenta[3]!==255)throw Error('Expected opaque magenta rectangle');
+ if(transparent[3]!==0)throw Error('Expected transparent center');
+ window.PFX_PROOF={ok:true,white,magenta,transparent,pixels:raw.length};
+ document.getElementById('status').textContent='VALIDATED — real source-built Vello pixels';
+}catch(err){window.PFX_PROOF.errors.push(String(err));document.getElementById('status').textContent='FAILED: '+err;}
+</script></body></html>

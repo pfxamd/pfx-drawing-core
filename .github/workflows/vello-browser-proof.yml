@@ -1,0 +1,50 @@
+name: Vello WASM isolated real-browser source proof
+on:
+  push:
+    branches:
+      - experiment/vello-browser-proof
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  chrome:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download Vello WASM built FROM SOURCE at pinned engine revision
+        uses: actions/download-artifact@v4
+        with:
+          name: pfx-source-browser-vello
+          run-id: 38183319164
+          github-token: ${{ github.token }}
+          path: artifacts/vello
+      - name: Set up Chrome browser proof
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p artifacts/proof/web artifacts/proof/output
+          cp compatibility/browser/vello-proof/index.html artifacts/proof/web/
+          cp artifacts/vello/web/pfx_vello_overlay.js artifacts/proof/web/
+          cp artifacts/vello/web/pfx_vello_overlay_bg.wasm artifacts/proof/web/
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Render and validate actual browser screenshot
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/proof/web" \
+          PFX_SCREENSHOT="$GITHUB_WORKSPACE/artifacts/proof/output/vello-source-browser.png" \
+          PFX_REPORT="$GITHUB_WORKSPACE/artifacts/proof/output/vello-source-browser.json" \
+            node compatibility/browser/vello-proof/test.cjs
+      - name: Retain screenshot and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-vello-source-browser-proof
+          path: artifacts/proof/output
+          if-no-files-found: ignore
