@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "phase": "isolated-source-build-probes",
+  "decision": "unselected",
+  "pinnedAt": "2026-10-11",
+  "engines": [
+    {
+      "id": "skia",
+      "repository": "https://github.com/google/skia",
+      "sha": "b23ddbff12658185f0d506befec22a84f8b8c03b",
+      "role": "2D reference raster engine",
+      "license": "BSD-3-Clause (verify third-party components)",
+      "build": "GN/Ninja",
+      "platformProbe": "native-linux-cpu"
+    },
+    {
+      "id": "filament",
+      "repository": "https://github.com/google/filament",
+      "sha": "764fe6cac9bdb4ba24d3d852344dfa04a5f70f75",
+      "role": "3D PBR renderer",
+      "license": "Apache-2.0 (verify third-party components)",
+      "build": "CMake/Ninja",
+      "platformProbe": "native-linux-library"
+    },
+    {
+      "id": "vello",
+      "repository": "https://github.com/linebender/vello",
+      "sha": "235739c4f08eb48d900e1512459d453a9ab77f96",
+      "role": "2D raster engine CPU/GPU",
+      "license": "MIT OR Apache-2.0 (verify third-party components)",
+      "build": "Cargo",
+      "platformProbe": "native-linux-cpu"
+    }
+  ],
+  "dependencyPolicy": "Source checkouts are temporary build inputs pinned by SHA. They are not yet selected, vendored into this repository, or renamed as PFx code.",
+  "caveats": [
+    "Native CPU/GPU library builds are not evidence of composite-frame integration.",
+    "Browser and native GPU context sharing require separate end-to-end tests.",
+    "Runtime benchmark numbers are hardware-specific and cannot certify relative performance.",
+    "License summaries are preliminary; original and transitive dependency licenses must be reviewed before copying code."
+  ]
+}
