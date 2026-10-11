@@ -20,7 +20,7 @@ const server=createServer((req,res)=>{
   page.on('pageerror',e=>errors.push(String(e)));
   page.on('console',e=>{if(e.type()==='error')errors.push(e.text())});
   await page.goto(url,{waitUntil:'load',timeout:30000});
-  await page.waitForFunction(()=>window.PFX_COMPOSITION?.frames>=5||window.PFX_COMPOSITION?.errors?.length>0,{timeout:120000});
+  await page.waitForFunction(()=>window.PFX_COMPOSITION?.frames>=5||window.PFX_COMPOSITION?.errors?.length>0,null,{timeout:120000});
   const state=await page.evaluate(()=>window.PFX_COMPOSITION);
   const buf=await page.screenshot({path:process.env.PFX_SCREENSHOT,animations:'disabled'});
   const png=PNG.sync.read(buf);
