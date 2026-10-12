@@ -1,0 +1,61 @@
+name: Browser cube 3D + Vello 2D source-artifact replay
+on:
+  push:
+    branches:
+      - experiment/browser-cube-proof
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+# Proof-only: reuse the exact already-built, pinned-source WASM from successful run
+# 38183319164. Production/release builds must rebuild locally from vendored source.
+jobs:
+  browser-cube-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: pfx-source-browser-vello
+          run-id: 38183319164
+          github-token: ${{ github.token }}
+          path: artifacts/vello
+      - uses: actions/download-artifact@v4
+        with:
+          name: pfx-source-browser-filament
+          run-id: 38183319164
+          github-token: ${{ github.token }}
+          path: artifacts/filament
+      - name: Assemble fully local browser rendering runtime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p artifacts/browser/web artifacts/browser/proof
+          cp compatibility/browser/web/* artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_overlay.js artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_overlay_bg.wasm artifacts/browser/web/
+          cp artifacts/filament/web/filament.js artifacts/browser/web/
+          cp artifacts/filament/web/filament.wasm artifacts/browser/web/
+          cp artifacts/filament/web/triangle.filamat artifacts/browser/web/
+          npm install --no-save playwright@1.56.1 pngjs@7.0.0
+          npx playwright install --with-deps chromium
+      - name: Verify animated 3D depth, Vello overlay, pixels, network isolation and timing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/browser/web" \
+          PFX_PROOF_DIR="$GITHUB_WORKSPACE/artifacts/browser/proof" \
+            node compatibility/browser/test-cube.cjs
+      - name: Preserve browser screenshots and measurements even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-browser-cube-proof
+          path: artifacts/browser/proof
+          if-no-files-found: ignore
