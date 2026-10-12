@@ -7,17 +7,17 @@ use vello_cpu::{color::palette::css, kurbo::{Affine, BezPath, Rect}};
 const FULL_W: u16 = 800;
 const FULL_H: u16 = 500;
 const A_X: u16 = 448;
-const A_Y: u16 = 104;
-const A_W: u16 = 200;
-const A_H: u16 = 190;
+const A_Y: u16 = 96;
+const A_W: u16 = 208;
+const A_H: u16 = 208;
 const B_X: u16 = 592;
-const B_Y: u16 = 152;
-const B_W: u16 = 184;
-const B_H: u16 = 192;
+const B_Y: u16 = 144;
+const B_W: u16 = 192;
+const B_H: u16 = 208;
 const UNION_X: u16 = A_X;
 const UNION_Y: u16 = A_Y;
-const UNION_W: u16 = 328;
-const UNION_H: u16 = 240;
+const UNION_W: u16 = 336;
+const UNION_H: u16 = 256;
 
 fn rect(ctx: &mut RenderContext, x: f64, y: f64, w: f64, h: f64, _ox: f64, _oy: f64) {
     ctx.fill_rect(&Rect::new(x, y, x + w, y + h));

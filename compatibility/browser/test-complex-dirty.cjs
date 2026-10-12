@@ -79,7 +79,7 @@ async function scenario(browser,origin,name,round){
       if(spec.strategy==='union')n.union=frames;
       if(spec.strategy==='overlap'){n.tileA=frames;n.tileB=frames;}
     }
-    const expectedBytes=n.full*1600000+n.union*314880+n.tileA*152000+n.tileB*141312;
+    const expectedBytes=n.full*1600000+n.union*344064+n.tileA*173056+n.tileB*159744;
     result={
       id,name,round,status:'PASS',mode:spec.mode,strategy:spec.strategy,frames:state.frames,
       cpuFrameMs:stats(state.frameCpuMs.slice(30)),callbackMs:stats(state.frameIntervalsMs.slice(30)),
@@ -90,7 +90,7 @@ async function scenario(browser,origin,name,round){
       lateCallbacks:state.frameIntervalsMs.filter(x=>x>24).length,
       renderedRegions:state.rendererCounts,expectedRegions:n,
       countedRgbaBytes:state.rgbaTransferBytes,expectedBytes,verification,
-      moving2dPixels:spec.mode==='3d'?null:changed(before,screenshot,{x0:450,y0:106,x1:772,y1:342}),
+      moving2dPixels:spec.mode==='3d'?null:changed(before,screenshot,{x0:450,y0:102,x1:780,y1:348}),
       moving3dPixels:spec.mode==='2d'?null:changed(before,screenshot,{x0:310,y0:245,x1:530,y1:405}),
       jsHeapUsedAt30:warm.JSHeapUsedSize??null,jsHeapUsedAtEnd:end.JSHeapUsedSize??null,
       glVersion:state.gpuVersion,glRenderer:state.gpuRenderer,contextLosses:state.contextLosses,

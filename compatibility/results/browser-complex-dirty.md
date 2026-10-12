@@ -1,6 +1,6 @@
 # Complex antialiased Bézier shapes and overlapping dirty regions
 
-**Status:** CI test prepared. No results are accepted until the full workflow succeeds.
+**Status:** CI tests exposed subpixel mismatches on the first two versions. Third experimental revision aligns dirty bounds to 16-pixel coordinates and records all channel differences. No success or performance claims until verified.
 
 ## Experiment
 
@@ -13,9 +13,9 @@ The same source-built Filament 3D cube runs simultaneously in mixed mode.
 Compare 3 different 2D strategies, each with and without Filament:
 
 - **full**: re-render the complete 800 x 500 RGBA Vello image each frame.
-- **union**: re-render one 328 x 240 bounding rectangle at (448,104).
-- **overlap**: re-render two intersecting rectangles, A=(448,104,200,190)
-  and B=(592,152,184,192). Their intersection is **56 x 142** pixels.
+- **union**: re-render one 336 x 256 bounding rectangle at (448,96).
+- **overlap**: re-render two intersecting rectangles, A=(448,96,208,208)
+  and B=(592,144,192,208). Their intersection is **64 x 160** pixels.
   Each tile independently rerenders the entire ordered path scene, so its
   already-composited RGBA can replace overlapping Canvas2D pixels exactly.
 
@@ -48,8 +48,8 @@ and actual Vello-to-Canvas2D buffer counts. The expected per-frame buffer sizes:
 | Render strategy | Bytes of RGBA raster output |
 |---|---:|
 | Full | 1,600,000 |
-| Union | 314,880 |
-| Two overlapping tiles | 293,312 |
+| Union | 344,064 |
+| Two overlapping tiles | 332,800 |
 
 These are CPU-side byte counts, not verified physical GPU bus transfer bytes.
 Exactness holds only for the tested geometry, coordinate system, pixel alignment

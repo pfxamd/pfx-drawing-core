@@ -27,9 +27,9 @@ if(mode!=='3d')try{
   const ctx=hud.getContext('2d',{willReadFrequently:true});
   const regions={
     full:{x:0,y:0,w:800,h:500,render:render_complex_full},
-    union:{x:448,y:104,w:328,h:240,render:render_complex_union},
-    tileA:{x:448,y:104,w:200,h:190,render:render_complex_tile_a},
-    tileB:{x:592,y:152,w:184,h:192,render:render_complex_tile_b}
+    union:{x:448,y:96,w:336,h:256,render:render_complex_union},
+    tileA:{x:448,y:96,w:208,h:208,render:render_complex_tile_a},
+    tileB:{x:592,y:144,w:192,h:208,render:render_complex_tile_b}
   };
   function put(key,frame){
     const r=regions[key],t=performance.now(),bytes=r.render(frame);
@@ -60,25 +60,33 @@ if(mode!=='3d')try{
   window.PFX_VERIFY_COMPLEX=()=>{
     const frames=[0,43,97,159];
     let mismatchesUnion=0,mismatchesA=0,mismatchesB=0;
-    let subpixelAlpha=0,overlapPainted=0,checks=0;
-    function mismatch(full,tile,r){
+    let subpixelAlpha=0,overlapPainted=0,checks=0,maxDelta=0,alphaMismatches=0;
+    const differences=[];
+    function mismatch(full,tile,r,region,frame){
       let wrong=0;
       for(let y=0;y<r.h;y++)for(let x=0;x<r.w;x++){
         const a=((y+r.y)*800+x+r.x)*4,b=(y*r.w+x)*4;
-        for(let c=0;c<4;c++){if(full[a+c]!==tile[b+c])wrong++;checks++;}
+        for(let c=0;c<4;c++){if(full[a+c]!==tile[b+c]){
+            wrong++;
+            const delta=Math.abs(full[a+c]-tile[b+c]);
+            maxDelta=Math.max(delta,maxDelta);
+            if(c===3)alphaMismatches++;
+            if(differences.length<20)differences.push({region,frame,x:x+r.x,y:y+r.y,channel:c,full:full[a+c],tile:tile[b+c],delta});
+          }
+          checks++;}
       }
       return wrong;
     }
     for(const frame of frames){
       const all=render_complex_full(frame);
-      mismatchesUnion+=mismatch(all,render_complex_union(frame),regions.union);
-      mismatchesA+=mismatch(all,render_complex_tile_a(frame),regions.tileA);
-      mismatchesB+=mismatch(all,render_complex_tile_b(frame),regions.tileB);
+      mismatchesUnion+=mismatch(all,render_complex_union(frame),regions.union,'union',frame);
+      mismatchesA+=mismatch(all,render_complex_tile_a(frame),regions.tileA,'tileA',frame);
+      mismatchesB+=mismatch(all,render_complex_tile_b(frame),regions.tileB,'tileB',frame);
       for(let y=112;y<340;y++)for(let x=455;x<770;x++){
         const i=(y*800+x)*4;
         if(all[i+3]>0&&all[i+3]<255)subpixelAlpha++;
       }
-      for(let y=152;y<294;y++)for(let x=592;x<648;x++){
+      for(let y=144;y<304;y++)for(let x=592;x<656;x++){
         if(all[(y*800+x)*4+3]>0)overlapPainted++;
       }
     }
@@ -88,7 +96,7 @@ if(mode!=='3d')try{
     for(let i=0;i<reference.length;i++)if(reference[i]!==pixels[i])mismatchesDisplayed++;
     return {
       mismatchesUnion,mismatchesA,mismatchesB,mismatchesDisplayed,
-      subpixelAlpha,overlapPainted,channelsCompared:checks,
+      subpixelAlpha,overlapPainted,channelsCompared:checks,maxDelta,alphaMismatches,differences,
       lastFrame:state.lastFrame,verificationFrames:frames
     };
   };
