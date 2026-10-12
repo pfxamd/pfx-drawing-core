@@ -38,3 +38,16 @@ Skia build source instructions: https://docs.skia.org/docs/user/build/
 Filament build source instructions: https://github.com/google/filament/blob/main/BUILDING.md
 
 Vello CPU example source: https://github.com/linebender/vello/blob/main/vello_cpu/README.md
+
+## Verified isolated browser composition — animated 3D cube + 2D overlay
+
+The additional [Chromium source-artifact replay](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38219202232)
+passed on 2026-10-12. It rendered a **true 3D, 24-vertex cube with perspective and animated
+transform in Filament**, and overlaid genuine Vello CPU WebAssembly pixels in a separate
+transparent 2D canvas. Evidence includes paired initial/final screenshots, pixel checks,
+the actual browser runtime log and DPR 1 / DPR 2 machine-readable reports.
+
+Read [the measured test report](results/browser-cube-proof.md) before relying on this result.
+In particular, this verifies browser DOM compositing, **not** shared WebGL GPU resources,
+Vello GPU rendering, color-management parity, real-GPU throughput, or desktop integration.
+The sources are still fetched in compatibility builds; no engine has been adopted or vendored.
