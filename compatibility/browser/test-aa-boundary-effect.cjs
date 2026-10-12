@@ -121,14 +121,11 @@ async function run(browser,origin,canvas,round){
      let legacy=0,canonical=0,rendered=0;
      for(const r of p.layouts[layout]){
       const b=render(s,r,true,true),old=render(s,r,false,true);
-      const refCrop=new Uint8Array(r.w*r.h*4);
-      for(let row=0;row<r.h;row++){
-       const src=((r.y+row)*w+r.x)*4;
-       refCrop.set(ref.subarray(src,src+r.w*4),row*r.w*4);
-      }
+      // The reference is the FULL canvas; compare() uses its full stride.
+      // A cropped reference cannot be passed with the full-scene stride.
       const samples=[];
-      canonical+=compare(refCrop,b,{x:0,y:0,w:r.w,h:r.h},samples).channels;
-      legacy+=compare(refCrop,old,{x:0,y:0,w:r.w,h:r.h},[]).channels;
+      canonical+=compare(ref,b,r,samples).channels;
+      legacy+=compare(ref,old,r,[]).channels;
       paste(caches[layout],b,r);
       rendered++;tileCalls++;
       if(s.mode>=2&&(r.x||r.y||r.w!==w||r.h!==h))wholeFallbackCalls++;
@@ -149,14 +146,9 @@ async function run(browser,origin,canvas,round){
     const full=render(state,base,false,false);
     const native=render(state,probe,true,false);
     const safe=render(state,probe,true,true);
-    const reference=new Uint8Array(probe.w*probe.h*4);
-    for(let y=0;y<probe.h;y++){
-     const idx=((probe.y+y)*w+probe.x)*4;
-     reference.set(full.subarray(idx,idx+probe.w*4),y*probe.w*4);
-    }
     probes.push({mode,region:probe,
-     nativeDifferences:compare(reference,native,{x:0,y:0,w:probe.w,h:probe.h},[]),
-     safeDifferences:compare(reference,safe,{x:0,y:0,w:probe.w,h:probe.h},[])});
+     nativeDifferences:compare(full,native,probe,[]),
+     safeDifferences:compare(full,safe,probe,[])});
    }
    return {canvas,round,totalMissed,totalCanonical,totalLegacy,
      totalCacheDifferences,totalChanged,tileCalls,wholeFallbackCalls,
