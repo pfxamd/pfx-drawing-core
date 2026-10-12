@@ -1,0 +1,105 @@
+name: Browser complex Bézier overlapping dirty-region proof
+on:
+  push:
+    branches:
+      - experiment/browser-complex-dirty-regions
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  complex-vello-wasm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin source and prepare Rust WASM target
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/linebender/vello.git "$RUNNER_TEMP/vello"
+          git -C "$RUNNER_TEMP/vello" fetch --depth=1 origin 235739c4f08eb48d900e1512459d453a9ab77f96
+          git -C "$RUNNER_TEMP/vello" checkout --detach 235739c4f08eb48d900e1512459d453a9ab77f96
+          test "$(git -C "$RUNNER_TEMP/vello" rev-parse HEAD)" = "235739c4f08eb48d900e1512459d453a9ab77f96"
+          cp -a compatibility/browser/vello-complex "$RUNNER_TEMP/complex"
+          rustup target add wasm32-unknown-unknown
+          mkdir -p artifacts/web
+      - name: Compile complex antialiased Vello geometry from source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          /usr/bin/time -v -o artifacts/complex-build-time.txt \
+            cargo build --manifest-path "$RUNNER_TEMP/complex/Cargo.toml" \
+            --release --target wasm32-unknown-unknown \
+            2>&1 | tee artifacts/complex-build.log
+          test -s "$RUNNER_TEMP/complex/target/wasm32-unknown-unknown/release/pfx_vello_complex.wasm"
+      - name: Bind all four independently clipped vector render entrypoints
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cargo install wasm-bindgen-cli --version 0.2.115 --locked --root "$RUNNER_TEMP/bindgen"
+          "$RUNNER_TEMP/bindgen/bin/wasm-bindgen" \
+            "$RUNNER_TEMP/complex/target/wasm32-unknown-unknown/release/pfx_vello_complex.wasm" \
+            --target web --out-dir artifacts/web --out-name pfx_vello_complex
+          test -s artifacts/web/pfx_vello_complex_bg.wasm
+          for x in render_complex_full render_complex_union render_complex_tile_a render_complex_tile_b; do
+            grep -q "$x" artifacts/web/pfx_vello_complex.js
+          done
+      - name: Preserve source-build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-complex-vello-wasm
+          path: artifacts
+          if-no-files-found: ignore
+
+  complex-browser-test:
+    needs: complex-vello-wasm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: pfx-complex-vello-wasm
+          path: artifacts/vello
+      - uses: actions/download-artifact@v4
+        with:
+          name: pfx-source-browser-filament
+          run-id: 38183319164
+          github-token: ${{ github.token }}
+          path: artifacts/filament
+      - name: Assemble local source-built 2D and 3D engines
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p artifacts/browser/web artifacts/browser/proof
+          cp compatibility/browser/web/* artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_complex.js artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_complex_bg.wasm artifacts/browser/web/
+          cp artifacts/filament/web/filament.js artifacts/browser/web/
+          cp artifacts/filament/web/filament.wasm artifacts/browser/web/
+          cp artifacts/filament/web/triangle.filamat artifacts/browser/web/
+          npm install --no-save playwright@1.56.1 pngjs@7.0.0
+          npx playwright install --with-deps chromium
+      - name: Compare changing antialiased paths, union rectangle and overlapping tiles
+        shell: bash
+        run: |
+          set -euxo pipefail
+          node --check compatibility/browser/test-complex-dirty.cjs
+          PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/browser/web" \
+          PFX_PROOF_DIR="$GITHUB_WORKSPACE/artifacts/browser/proof" \
+            node compatibility/browser/test-complex-dirty.cjs
+          test -s artifacts/browser/proof/complex-dirty-summary.json
+      - name: Keep screenshots, per-case checks, and failure details
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-complex-dirty-browser-proof
+          path: artifacts/browser/proof
+          if-no-files-found: ignore
