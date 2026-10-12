@@ -1,4 +1,4 @@
-import initVello, {render_overlay} from './pfx_vello_overlay.js';
+// Load each engine only when its mode requires it; never imply shared GPU ownership.
 
 // A compatibility experiment, not the PFx renderer or a shared GPU context.
 const state=window.PFX_COMPOSITION={
@@ -10,6 +10,10 @@ const params=new URLSearchParams(location.search);
 const requested=Number(params.get('stressFrames'));
 const targetFrames=params.has('stressFrames')&&Number.isInteger(requested)&&requested>=100&&requested<=1200?requested:100;
 const hideOverlay=params.get('overlay')==='hidden';
+const mode=['2d','3d','mixed'].includes(params.get('mode'))?params.get('mode'):'mixed';
+state.mode=mode;
+state.engineAssets=[];
+state.overlayRgbaBytes=0;
 state.targetFrames=targetFrames;
 state.overlayVisible=!hideOverlay;
 if(hideOverlay)document.querySelector('#hud').style.visibility='hidden';
@@ -19,12 +23,14 @@ window.addEventListener('unhandledrejection',e=>state.errors.push(String(e.reaso
 const canvas=document.querySelector('#gpu');
 const hud=document.querySelector('#hud');
 
-try {
+if(mode!=='3d')try {
+  const {default:initVello,render_overlay}=await import('./pfx_vello_overlay.js');
   await initVello();
   const begin=performance.now();
   const pixels=render_overlay(800,500);
   state.velloRenderMs=+(performance.now()-begin).toFixed(3);
   if(pixels.length!==800*500*4)throw Error('Unexpected Vello RGBA buffer size');
+  state.overlayRgbaBytes=pixels.byteLength;
   const context=hud.getContext('2d',{willReadFrequently:true});
   const uploadStart=performance.now();
   context.putImageData(new ImageData(new Uint8ClampedArray(pixels),800,500),0,0);
@@ -42,7 +48,7 @@ try {
   state.pixelChecks={opaque:fill[3],transparent:clear[3],overlap:[...overlap]};
 } catch(error){state.errors.push('VELLO: '+String(error));}
 
-try {
+if(mode!=='2d')try {
   if(!window.Filament)throw Error('Source-built Filament runtime absent');
   Filament.init(['./triangle.filamat'],()=>{
     try {
@@ -99,6 +105,8 @@ try {
         state.errors.push('Unexpected WebGL context lost');
       });
       state.gpuVersion=gl.getParameter(gl.VERSION);
+      const debug=gl.getExtension('WEBGL_debug_renderer_info');
+      state.gpuRenderer=debug?gl.getParameter(debug.UNMASKED_RENDERER_WEBGL):null;
       state.geometry='24-vertex, 36-index cube';
       state.perspective=true;
       state.filament=true;
@@ -129,3 +137,18 @@ try {
     }catch(error){state.errors.push('FILAMENT CONSTRUCTOR: '+String(error));}
   });
 }catch(error){state.errors.push('FILAMENT: '+String(error));}
+
+if(mode==='2d'){
+  if(state.vello){
+    let previous=null;
+    function tick(timestamp){
+      if(previous!==null)state.frameIntervalsMs.push(+(timestamp-previous).toFixed(3));
+      previous=timestamp;
+      state.frames++;
+      if(state.frames<targetFrames)requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }else{
+    state.errors.push('2D-only mode failed to initialize');
+  }
+}
