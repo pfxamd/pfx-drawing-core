@@ -212,3 +212,16 @@ canvas (120 with Gaussian effects); all 1,376,266 changed reference pixels
 were covered and persistent full-frame RGBA caches were byte-exact. These
 are scoped CPU WASM numerical results, NOT generalized halo/speed/GPU proof;
 no `main` merge.
+
+## Deterministic randomized blur-radius and affine property proof
+
+[Verified diagnostic report](results/browser-aa-random-blur-bench.md):
+[source-built CPU WASM browser run](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38286104070)
+and [strict full-frame fallback replay](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38286942733).
+216 scene instances / 432 actual ROIs across three canvases, two Chromium
+contexts and six Gaussian radii 0–20. The previously successful **fixed 16px
+source halo FAILS on 130/432 randomized ROI checks**, and even 96px still
+fails 102 cases. Exact fail-closed full-frame raster + crop reverified for all
+130 unsafe cases with **zero changed RGBA channels**. Interleaved CPU WASM
+timing is recorded for six exact ROI samples, but is not universal speedup
+or GPU evidence. No main merge.
