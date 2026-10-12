@@ -118,3 +118,13 @@ For the sampled full-frame versus three independently rerasterized dirty regions
 Runtime medians were 0.3ms for both partial strategies on this runner.
 This is a fixed 800x500 experimental scene with filled paths only; it is not a
 general clipping/damage solution or real-GPU evidence. No main merge.
+
+## Extended affine / strokes / freeform clipping regression
+
+[Verified 72/72 Vello CPU byte-exact cases](results/browser-aa-transform-stroke-clip.md):
+three canvas sizes, three transforms and four path/clip modes, in two isolated
+browser contexts, run [38256072097](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38256072097).
+Canonical global flattening: 0 changed channels; previous local-first control:
+14,600 differences across both passes. The source-built pinned proof handles
+stroked paths and canvas dimensions dynamically, with unchanged full-frame
+reference. CPU-only browser evidence; not a production renderer or main merge.
