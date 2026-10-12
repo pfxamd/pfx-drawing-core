@@ -1,0 +1,108 @@
+name: Vello CPU internal coverage and flatten trace
+on:
+  push:
+    branches:
+      - experiment/browser-aa-coverage-internals
+    paths:
+      - '.github/workflows/browser-aa-coverage-internals.yml'
+      - 'compatibility/browser/aa-coverage-internals/**'
+      - 'compatibility/browser/vello-complex/**'
+      - 'compatibility/browser/web/aa-precision.html'
+      - 'compatibility/browser/test-aa-coverage-internals.cjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  source-built-instrumented-vello:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch unmodified exact upstream source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/linebender/vello.git "$RUNNER_TEMP/vello"
+          git -C "$RUNNER_TEMP/vello" fetch --depth=1 origin 235739c4f08eb48d900e1512459d453a9ab77f96
+          git -C "$RUNNER_TEMP/vello" checkout --detach 235739c4f08eb48d900e1512459d453a9ab77f96
+          test "$(git -C "$RUNNER_TEMP/vello" rev-parse HEAD)" = 235739c4f08eb48d900e1512459d453a9ab77f96
+          cp -a compatibility/browser/vello-complex "$RUNNER_TEMP/complex"
+          rustup target add wasm32-unknown-unknown
+      - name: Apply assertive diagnostic patch to temporary upstream checkout
+        shell: bash
+        run: |
+          set -euxo pipefail
+          node --check compatibility/browser/aa-coverage-internals/patch-upstream.cjs
+          node compatibility/browser/aa-coverage-internals/patch-upstream.cjs "$RUNNER_TEMP/vello"
+          git -C "$RUNNER_TEMP/vello" diff -- vello_common/src/lib.rs vello_common/src/strip.rs vello_common/src/strip_generator.rs > "$RUNNER_TEMP/pfx-vello-diagnostic.patch"
+          mkdir -p artifacts/web artifacts/proof
+          cp "$RUNNER_TEMP/pfx-vello-diagnostic.patch" artifacts/proof/
+          cp compatibility/browser/aa-coverage-internals/pfx_trace.rs artifacts/proof/
+      - name: Compile actual instrumented Vello CPU WASM
+        shell: bash
+        run: |
+          set -euxo pipefail
+          /usr/bin/time -v -o artifacts/proof/build-time.txt \
+            cargo build --manifest-path "$RUNNER_TEMP/complex/Cargo.toml" \
+            --release --target wasm32-unknown-unknown 2>&1 | tee artifacts/proof/build.log
+          test -s "$RUNNER_TEMP/complex/target/wasm32-unknown-unknown/release/pfx_vello_complex.wasm"
+      - name: Export actual intermediate trace entrypoints
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cargo install wasm-bindgen-cli --version 0.2.115 --locked --root "$RUNNER_TEMP/bindgen"
+          "$RUNNER_TEMP/bindgen/bin/wasm-bindgen" \
+            "$RUNNER_TEMP/complex/target/wasm32-unknown-unknown/release/pfx_vello_complex.wasm" \
+            --target web --out-dir artifacts/web --out-name pfx_vello_complex
+          grep -q render_complex_intermediate artifacts/web/pfx_vello_complex.js
+          grep -q intermediate_coverages artifacts/web/pfx_vello_complex.js
+          grep -q intermediate_lines artifacts/web/pfx_vello_complex.js
+          test -s artifacts/web/pfx_vello_complex_bg.wasm
+      - name: Preserve source proof and full build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-vello-coverage-internals-built
+          path: artifacts
+          if-no-files-found: ignore
+
+  browser-stage-correlation:
+    needs: source-built-instrumented-vello
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: pfx-vello-coverage-internals-built
+          path: artifacts/vello
+      - name: Assemble fully local source-built browser harness
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p artifacts/browser/web artifacts/browser/proof
+          cp compatibility/browser/web/aa-precision.html artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_complex.js artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_complex_bg.wasm artifacts/browser/web/
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+          node --check compatibility/browser/test-aa-coverage-internals.cjs
+      - name: Compare prequantized alpha, quantized mask and actual pixel alpha
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/browser/web" \
+          PFX_PROOF_DIR="$GITHUB_WORKSPACE/artifacts/browser/proof" \
+          node compatibility/browser/test-aa-coverage-internals.cjs
+          test -s artifacts/browser/proof/coverage-internals-summary.json
+      - name: Keep complete positive or negative browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-vello-coverage-internals-browser
+          path: artifacts/browser/proof
+          if-no-files-found: ignore
