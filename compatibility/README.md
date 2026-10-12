@@ -82,3 +82,11 @@ from [CI run 38242292443](https://github.com/pfxamd/pfx-drawing-core/actions/run
 Dirty union CPU frame work p95 was 6.7ms vs 14.8ms for full redraw in mixed
 SwiftShader tests, but independent AA rasters differed by up to **1/255** per
 RGBA channel at sparse edges. **Not** bit-identical and **not** hardware GPU evidence.
+
+## Antialiasing precision with padded dirty regions and transforms
+
+[Verified Vello pixel-stage AA analysis](results/browser-aa-precision.md): 18/18 browser
+cases across six transforms and three fresh contexts. 0/8/16/32px padding
+never achieved byte-exact equality; raw premultiplied pixels already differ
+slightly, with maximum channel deviation 1/255. No claim of hardware GPU
+performance or a final renderer selection.
