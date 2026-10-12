@@ -1,6 +1,41 @@
 # Browser isolated-vs-combined 2D/3D workload comparison
 
-**Status: awaiting workflow completion. Do not use numbers until verified.**
+## Verified outcome — 2026-10-12
+
+- **CI run:** [38230352604](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38230352604) — completed **SUCCESS**.
+- **Raw evidence:** [19-file artifact 11738515473](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38230352604/artifacts/11738515473) — 9 PNGs, 9 per-run JSONs and 1 aggregate JSON.
+- **Tested code:** \`07a7fea3c60c61119ffeadc25c453866ba056263\`.
+- **Assertions:** 9/9 cases, 2160/2160 frames; both engine-isolation checks, zero browser errors, off-origin requests and unexpected context loss. Dynamic cube and 2D pixels were verified from screenshots. The mixed screenshot was inspected after download.
+
+The table shows **median values across 3 runs per mode**, NOT hardware measurements:
+
+| Observed measure | Vello CPU 2D only | Filament 3D only | Vello + Filament |
+|---|---:|---:|---:|
+| Completed frames | 720 | 720 | 720 |
+| RAF callback interval p95, ms | 16.7 | 16.8 | 16.8 |
+| Filament renderer CPU call p95, ms | n/a | 0.5 | 0.5 |
+| JS heap at 240 frames, bytes | 1,978,596 | 3,945,756 | 3,814,936 |
+| Sum of Chromium subprocess RSS, KiB | 430,700 | 486,144 | 498,672 |
+| Vello one-shot CPU raster, ms | 9.2 | n/a | 6.5 |
+| Canvas2D image upload call, ms | 4.3 | n/a | 3.6 |
+
+At 800 × 500 RGBA, the one-time raster buffer is **1,600,000 bytes**.
+The observed median summed Chromium process RSS is **12,528 KiB higher** in
+mixed than 3D alone; it includes browser processes and multiply-counted
+shared resident pages, varies with repeated-run order and is **not** a
+measurement of dedicated GPU memory or a causal compositor allocation.
+
+The test page only rerasterizes and uploads Vello at initialization, so the
+matching 3D render-call p95 values say **nothing** about dynamic mixed-frame
+performance or data transfer when the vector layer changes each frame.
+In particular no conclusion that shared-device composition would be faster,
+slower or preferable is justified by this result.
+
+**Decision: maintain the experiment; no engines selected, no shared GPU
+context proven and no production architecture approved.** The next research
+gate needs a moving 2D layer with per-frame upload, a controlled direct
+compositor measurement and a real hardware GPU comparison.
+
 
 This is a follow-on **experiment**, not a renderer selection or production benchmark.
 The executable test and uploaded JSON are the evidence. Replays pinned source-built

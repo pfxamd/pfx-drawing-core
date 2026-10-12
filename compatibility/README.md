@@ -51,3 +51,10 @@ Read [the measured test report](results/browser-cube-proof.md) before relying on
 In particular, this verifies browser DOM compositing, **not** shared WebGL GPU resources,
 Vello GPU rendering, color-management parity, real-GPU throughput, or desktop integration.
 The sources are still fetched in compatibility builds; no engine has been adopted or vendored.
+
+## Latest browser composition comparison
+
+[Verified 2D-only vs 3D-only vs mixed browser measurements](results/browser-composition-comparison.md)
+from [run 38230352604](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38230352604).
+All 9 isolated test cases passed (2160 frames). Measurements use SwiftShader,
+static Vello CPU pixels and separate canvases: no hardware GPU or shared context claim.
