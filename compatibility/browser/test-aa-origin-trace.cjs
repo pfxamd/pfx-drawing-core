@@ -97,7 +97,9 @@ async function runScenario(browser,origin,spec,round){
         const fullRgba=raster(frame,full,spec.quality);
         if(spec.scene===7&&!spec.quality){
           const previous=original(frame);
-          for(let i=0;i<previous.length;i++)if(previous[i]!==fullRgba[i])output.legacyByteDiffs++;
+          // Legacy export is straight-alpha; the diagnostic loop above is raw premul.
+          const compatible=trace(frame,0,0,800,500,1,0,0,0,false,7,false);
+          for(let i=0;i<previous.length;i++)if(previous[i]!==compatible[i])output.legacyByteDiffs++;
         }
         for(let y=roi.y;y<roi.y+roi.h;y++)for(let x=roi.x;x<roi.x+roi.w;x++){
           if(fullRgba[(y*800+x)*4+3]>0)output.nontransparent++;
