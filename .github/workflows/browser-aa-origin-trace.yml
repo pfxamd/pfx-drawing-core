@@ -1,0 +1,94 @@
+name: Vello CPU antialias origin and coverage isolation
+on:
+  push:
+    branches:
+      - experiment/browser-aa-origin-trace
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-instrumented-vello:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact pinned Vello source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/linebender/vello.git "$RUNNER_TEMP/vello"
+          git -C "$RUNNER_TEMP/vello" fetch --depth=1 origin 235739c4f08eb48d900e1512459d453a9ab77f96
+          git -C "$RUNNER_TEMP/vello" checkout --detach 235739c4f08eb48d900e1512459d453a9ab77f96
+          test "$(git -C "$RUNNER_TEMP/vello" rev-parse HEAD)" = "235739c4f08eb48d900e1512459d453a9ab77f96"
+          cp -a compatibility/browser/vello-complex "$RUNNER_TEMP/complex"
+          rustup target add wasm32-unknown-unknown
+          mkdir -p artifacts/web
+      - name: Build speed and quality rendering variants into WASM
+        shell: bash
+        run: |
+          set -euxo pipefail
+          /usr/bin/time -v -o artifacts/aa-origin-build-time.txt \
+            cargo build --manifest-path "$RUNNER_TEMP/complex/Cargo.toml" \
+              --release --target wasm32-unknown-unknown \
+              2>&1 | tee artifacts/aa-origin-build.log
+          test -s "$RUNNER_TEMP/complex/target/wasm32-unknown-unknown/release/pfx_vello_complex.wasm"
+      - name: Export browser probes
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cargo install wasm-bindgen-cli --version 0.2.115 --locked --root "$RUNNER_TEMP/bindgen"
+          "$RUNNER_TEMP/bindgen/bin/wasm-bindgen" \
+            "$RUNNER_TEMP/complex/target/wasm32-unknown-unknown/release/pfx_vello_complex.wasm" \
+            --target web --out-dir artifacts/web --out-name pfx_vello_complex
+          grep -q render_complex_origin_trace artifacts/web/pfx_vello_complex.js
+          grep -q render_complex_full artifacts/web/pfx_vello_complex.js
+          test -s artifacts/web/pfx_vello_complex_bg.wasm
+      - name: Preserve pinned-source build and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-aa-origin-vello-build
+          path: artifacts
+          if-no-files-found: ignore
+
+  verify-aa-origin:
+    needs: build-instrumented-vello
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: pfx-aa-origin-vello-build
+          path: artifacts/vello
+      - name: Assemble independent browser proof
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p artifacts/browser/web artifacts/browser/proof
+          cp compatibility/browser/web/aa-precision.html artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_complex.js artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_complex_bg.wasm artifacts/browser/web/
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+          node --check compatibility/browser/test-aa-origin-trace.cjs
+      - name: Verify single-path coverage and origin-dependent raster differences
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/browser/web" \
+          PFX_PROOF_DIR="$GITHUB_WORKSPACE/artifacts/browser/proof" \
+            node compatibility/browser/test-aa-origin-trace.cjs
+          test -s artifacts/browser/proof/aa-origin-summary.json
+      - name: Retain machine-readable and screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-aa-origin-browser-proof
+          path: artifacts/browser/proof
+          if-no-files-found: ignore
