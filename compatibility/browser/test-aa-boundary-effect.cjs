@@ -63,7 +63,7 @@ async function run(browser,origin,canvas,round){
  try{
   await page.goto(origin+'/aa-precision.html',{waitUntil:'load',timeout:30000});
   await page.waitForFunction(()=>window.PFX_AA!==undefined,null,{timeout:120000});
-  report=await page.evaluate(({canvas,states,plans,layouts})=>{
+  report=await page.evaluate(({canvas,states,plans,layouts,round})=>{
    const api=window.PFX_AA;if(!api.ready||typeof api.boundaryEffect!=='function')throw Error('WASM missing '+api.error);
    const {w,h}=canvas,base={x:0,y:0,w,h};
    const render=(state,r,canonical,safe)=>{
@@ -161,7 +161,7 @@ async function run(browser,origin,canvas,round){
    return {canvas,round,totalMissed,totalCanonical,totalLegacy,
      totalCacheDifferences,totalChanged,tileCalls,wholeFallbackCalls,
      fullChanged,painted,transitions,probes};
-  },{canvas,states,plans:safePlans,layouts});
+  },{canvas,states,plans:safePlans,layouts,round});
   if(round===1&&canvas.w===800){
    await page.evaluate(({state})=>{
     const img=window.PFX_AA.boundaryEffect(800,500,0,0,800,500,
