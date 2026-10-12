@@ -1,9 +1,65 @@
 # Complex antialiased Bézier shapes and overlapping dirty regions
 
-**Status:** previous test revealed sparse 1/255 antialiasing differences.
-This version applies an explicit maximum deviation of 1 channel level and fewer
-than 0.01% differing byte channels. It records all differences honestly; it
-does not claim pixel-by-pixel byte identity. Await a successful browser CI run.
+## Verified CI result — 2026-10-12
+
+- [Successful run 38242292443](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38242292443)
+  executed the 21 browser scenarios in 3 fresh-context repetitions each:
+  **21 / 21 passed, 3360 / 3360 frames**.
+- [43-file evidence artifact](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38242292443/artifacts/11743396428):
+  21 PNG screenshots, 21 per-case JSONs and one aggregate summary.
+- The running engine was the **actual pinned-source Vello CPU WASM**, compiled successfully
+  by the build job in [run 38241471305](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38241471305)
+  at commit `35bca973a4d033e555d33620727f72cdbf179861`. The successful browser run
+  replayed the same compiled binaries while refining the precision acceptance check.
+  Filament WASM is reused from the original pinned-source proof.
+- Real screenshots of moving antialiased, overlapping 2D Bézier paths in front of
+  a moving 3D Filament cube were downloaded and visually inspected.
+
+**Performance measurements:** median of the per-run 95th-percentile CPU-side
+frame work durations over 3 runs for each workload, **not hardware GPU timing**.
+
+| Workload | Frames | CPU frame work p95, ms | RAF interval p95, ms | Vello raster call p95, ms | Canvas upload call p95, ms | RGBA input across 3 runs |
+|---|---:|---:|---:|---:|---:|---:|
+| 3D only | 480 | 0.5 | 16.7 | — | — | 0 |
+| 2D full | 480 | 12.9 | 16.7 | 6.6 | 3.0 | 772,800,000 bytes |
+| 2D union | 480 | 5.7 | 16.7 | 1.3 | 4.1 | 169,950,720 bytes |
+| 2D overlap | 480 | 6.3 | 16.7 | 2.7 | 1.9 | 164,544,000 bytes |
+| Mixed full | 480 | 14.8 | 16.8 | 7.8 | 3.9 | 772,800,000 bytes |
+| Mixed union | 480 | **6.7** | 16.8 | 2.3 | 4.6 | 169,950,720 bytes |
+| Mixed overlap | 480 | **6.9** | 16.7 | 3.2 | 2.2 | 164,544,000 bytes |
+
+The mixed-mode union reduced observed median CPU frame work p95 by about
+**54.7%** relative to full-frame Vello repaint for this scene; overlapping tiles
+gave about **53.4%** less. The count of input RGBA bytes was **78.0%** lower
+for union and **78.7%** lower for overlapping tiles than for full redraw.
+Overlapping regions are not necessarily faster despite slightly fewer input bytes,
+because two raster operations and two uploads are needed each callback.
+
+**Numerical image correctness — limitation, not hidden:** the pixel-exact
+reference test failed in the first three development runs. After inspecting
+location, channel and magnitude, the independently rasterized antialiased
+Vello paths differ only **1/255** in a sparse subset of component values:
+
+- Over 4 verification frames, 33 mismatched channel values for the bounding union,
+  14 for tile A and 27 for tile B, totaling **74 of 2,707,456** independently
+  compared RGBA channels (**0.00273%**; no channel difference exceeds 1).
+- Final displayed 800 x 500 RGBA image in the mixed overlapped example differed
+  by **5 of 1,600,000** byte channels from the independently regenerated full
+  reference. Those 5 also differed by no more than 1.
+- The test explicitly fails if any difference exceeds 1/255 or if more than
+  **0.01%** of channels differ. The recorded observation is *bounded numerical
+  equivalence*, **not bit-exact pixel equality**.
+- Partial-alpha antialiased edges and painted areas in overlapping tiles are
+  explicitly asserted, as are motion, resource isolation and zero unexpected
+  WebGL context losses.
+
+**Research outcome:** separate dirty-region Vello CPU redraws can materially
+reduce this benchmark's observed CPU work and RGBA input size while retaining
+near-identical scene output, but bit-exact antialiasing remains unresolved.
+The experiment uses manually specified conservative dirty bounds, not automatic
+damage tracking. It cannot establish GPU hardware performance, true VRAM use,
+browser compositor timings, shared context ownership or production readiness.
+**No final engine choice and no merge to main.**
 
 ## Experiment
 

@@ -74,3 +74,11 @@ all 15 cases passed (2700 frames), final full-frame RGBA output byte-identical
 in both drawing strategies. [CI run 38234646339](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38234646339).
 The result concerns only Vello CPU-WASM and the separate Canvas2D/WebGL2
 software-composited experimental browser pathway, not actual GPU memory or throughput.
+
+## Antialiased Bézier geometry with overlapping dirty rectangles
+
+[Verified 21-case complex vector clip benchmark](results/browser-complex-dirty.md)
+from [CI run 38242292443](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38242292443).
+Dirty union CPU frame work p95 was 6.7ms vs 14.8ms for full redraw in mixed
+SwiftShader tests, but independent AA rasters differed by up to **1/255** per
+RGBA channel at sparse edges. **Not** bit-identical and **not** hardware GPU evidence.
