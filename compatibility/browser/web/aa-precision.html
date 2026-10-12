@@ -11,7 +11,7 @@ canvas{display:block;width:800px;height:500px}
 try {
   const { default: init, render_complex_probe, render_complex_full, render_complex_origin_trace,
     render_complex_intermediate, render_complex_canonical,
-    render_complex_extended, render_complex_layered, render_complex_operations, render_complex_graph,
+    render_complex_extended, render_complex_layered, render_complex_operations, render_complex_graph, render_complex_affine_graph,
     intermediate_lines, intermediate_coverages,
     intermediate_truncated } = await import('./pfx_vello_complex.js');
   await init();
@@ -26,6 +26,7 @@ try {
     layered:render_complex_layered,
     operations:render_complex_operations,
     graph:render_complex_graph,
+    affineGraph:render_complex_affine_graph,
     traceLines:intermediate_lines,
     traceCoverage:intermediate_coverages,
     traceTruncated:intermediate_truncated,
