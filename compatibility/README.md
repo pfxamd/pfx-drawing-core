@@ -184,3 +184,17 @@ Over 144 transitions and 690 real WASM tile renders, **922,232 changed pixels
 were all covered and complete frame caches were byte-exact**. The original
 local-first control had 356 changed RGBA channels; canonical had zero.
 Temporary pinned Vello CPU experiment only; no GPU proof and no `main` merge.
+
+## Boundary stress: near-singular strokes, alpha masks, and Gaussian filter
+
+[Validated fallback-aware boundary experiment](results/browser-aa-boundary-effect.md)
+([6/6 successful browser/context checks](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38276525101)).
+Sharp miter joins, near-singular affine matrices, real isolated alpha masks and
+Gaussian blur were tested with an operation-derived conservative damage planner.
+The unsafe native subregion experiment found 1–2 changed RGBA channels in some
+mask/miter tiles. **Fail-closed full-frame invalidation** now applies to those
+cases and filtered changes: 132 entire-frame renders vs 30 genuine dirty-tile
+renders over 78 transitions. All 1,376,266 changed reference pixels were covered,
+and the final persistent frames match byte-exactly. This is correctness proof
+WITH fallback, not proof that those effects can be accelerated with local tiles.
+Software Vello CPU only, not merged into `main`.
