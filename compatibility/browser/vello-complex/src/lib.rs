@@ -209,6 +209,20 @@ pub fn render_complex_intermediate(
     vello_common::pfx_trace::end();
     pixels
 }
+// Canonical mode is a controlled alternative; trace collection is optional so
+// the rendering cost can be benchmarked without trace-buffer overhead.
+#[wasm_bindgen]
+pub fn render_complex_canonical(
+    frame:u32, ox:u16, oy:u16, width:u16, height:u16,
+    scene:u8, canonical:bool, trace:bool
+) -> Vec<u8> {
+    vello_common::pfx_trace::begin_mode(ox,oy,canonical,trace);
+    let rgba=render_variant_trace(frame,ox,oy,width,height,
+        1.0,0.0,0.0,0.0,true,scene,false);
+    vello_common::pfx_trace::end();
+    rgba
+}
+
 #[wasm_bindgen]
 pub fn intermediate_lines() -> Vec<f32> {
     vello_common::pfx_trace::lines()
