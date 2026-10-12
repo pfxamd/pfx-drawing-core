@@ -97,7 +97,9 @@ async function scenario(browser, origin, spec, round) {
         for(const format of formats){
           const full=format?raw:straight;
           for(const pad of pads){
-            const r={x:core.x-pad,y:core.y-pad,w:core.w+2*pad,h:core.h+2*pad};
+            const r={x:core.x-pad,y:core.y-pad,
+              w:Math.min(fullW,core.x+core.w+pad)-(core.x-pad),
+              h:Math.min(fullH,core.y+core.h+pad)-(core.y-pad)};
             const part=raster(frame,r,format),d=data[labels[format]+'-'+pad];
             let frameMismatches=0;
             for(let y=0;y<core.h;y++)for(let x=0;x<core.w;x++){
@@ -147,7 +149,9 @@ async function scenario(browser, origin, spec, round) {
       const benchFrames=Array.from({length:24},(_,i)=>43+i);
       for(const pad of ['full',...pads]){
         const r=pad==='full'?{x:0,y:0,w:800,h:500}:
-          {x:core.x-pad,y:core.y-pad,w:core.w+2*pad,h:core.h+2*pad};
+          {x:core.x-pad,y:core.y-pad,
+            w:Math.min(fullW,core.x+core.w+pad)-(core.x-pad),
+            h:Math.min(fullH,core.y+core.h+pad)-(core.y-pad)};
         // Warm up this exact call before collecting CPU-side wall-clock timings.
         for(let i=0;i<3;i++)raster(40+i,r,false);
         const durations=[];
@@ -214,7 +218,7 @@ async function scenario(browser, origin, spec, round) {
       status:errors.length?'FAIL':'PASS',
       casesPassed:report.length,casesAttempted:scenes.length*schedules.length,
       errors,observations:report.map(r=>({
-        scene:r.spec.name,round:r.spec.name&&r.spec,
+        scene:r.spec.name,
         baselineStraight:r.results['straight-0'].mismatchChannels,
         baselinePremul:r.results['premultiplied-0'].mismatchChannels,
         straightByPadding:[0,8,16,32].map(p=>r.results['straight-'+p].mismatchChannels),
