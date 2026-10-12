@@ -432,3 +432,118 @@ pub fn render_complex_layered(
     vello_common::pfx_trace::end();
     data
 }
+
+
+// Diagnostic command stream for testing operation-derived dirty invalidation.
+// Every command carries [id, kind, dx, dy, opacity, blend, clip]. The SAME
+// supplied command array drives the full render and independently rendered tiles.
+// The browser computes damage from these commands, not from reference pixels.
+#[wasm_bindgen]
+pub fn render_complex_operations(
+    full_width:u16, full_height:u16,
+    ox:u16, oy:u16, width:u16, height:u16,
+    commands:Vec<f64>, canonical:bool
+) -> Vec<u8> {
+    if full_width==0 || full_height==0 || width==0 || height==0
+        || u32::from(ox)+u32::from(width)>u32::from(full_width)
+        || u32::from(oy)+u32::from(height)>u32::from(full_height)
+        || commands.len()%7!=0 || commands.len()>224 {
+        return Vec::new();
+    }
+    for entry in commands.chunks_exact(7) {
+        if entry.iter().any(|v| !v.is_finite())
+            || entry[0].fract()!=0.0 || entry[0]<0.0
+            || entry[1].fract()!=0.0 || !(1.0..=3.0).contains(&entry[1])
+            || entry[4]<0.0 || entry[4]>1.0
+            || entry[5].fract()!=0.0 || !(0.0..=3.0).contains(&entry[5])
+            || entry[6].fract()!=0.0 || !(0.0..=1.0).contains(&entry[6])
+        {return Vec::new();}
+    }
+    use vello_cpu::peniko::{BlendMode, Mix, Compose};
+    vello_common::pfx_trace::begin_extended(
+        ox,oy,full_width,full_height,canonical,false
+    );
+    let mut ctx=RenderContext::new(width,height);
+    let mut res=Resources::new();
+    let local=Affine::translate((-f64::from(ox),-f64::from(oy)));
+    ctx.set_transform(local);
+    ctx.set_paint(css::WHITE);
+    ctx.fill_rect(&Rect::new(40.0,30.0,
+        f64::from(full_width)-24.0,f64::from(full_height)-16.0));
+    ctx.set_paint(css::MAGENTA);
+    ctx.fill_rect(&Rect::new(245.0,231.0,738.0,241.0));
+    for entry in commands.chunks_exact(7) {
+        let kind=entry[1] as u8;
+        ctx.set_transform(local * Affine::translate((entry[2],entry[3])));
+        let mix=match entry[5] as u8 {
+            1=>Mix::Multiply,2=>Mix::Screen,3=>Mix::Overlay,_=>Mix::Normal
+        };
+        ctx.push_blend_layer(BlendMode { mix,compose:Compose::SrcOver });
+        ctx.push_opacity_layer(entry[4] as f32);
+        if entry[6]!=0.0 {
+            let mut clip=BezPath::new();
+            match kind {
+                1=>{
+                    clip.move_to((470.375,130.125));
+                    clip.curve_to((510.625,86.375),(646.125,164.875),(640.375,226.125));
+                    clip.quad_to((568.625,277.375),(470.375,130.125));
+                },
+                2=>{
+                    clip.move_to((595.125,186.875));
+                    clip.curve_to((674.375,128.125),(774.625,237.875),(768.875,287.375));
+                    clip.quad_to((666.125,373.125),(595.125,186.875));
+                },
+                _=>{
+                    clip.move_to((174.375,292.625));
+                    clip.curve_to((217.625,232.375),(369.125,302.875),(368.375,389.625));
+                    clip.quad_to((253.625,442.125),(174.375,292.625));
+                }
+            }
+            clip.close_path();
+            ctx.push_clip_path(&clip);
+        }
+        match kind {
+            1=>{
+                let (x,y)=(480.45,145.15);
+                let mut p=BezPath::new();
+                p.move_to((x,y+55.0));
+                p.curve_to((x-10.15,y+5.25),(x+78.75,y-28.65),(x+112.35,y+15.55));
+                p.curve_to((x+157.45,y+64.05),(x+88.85,y+118.25),(x+28.2,y+100.3));
+                p.quad_to((x-15.65,y+85.45),(x,y+55.0));
+                p.close_path();
+                ctx.set_paint(css::MAGENTA);
+                ctx.fill_path(&p);
+            },
+            2=>{
+                let (x,y)=(608.65,202.35);
+                let mut p=BezPath::new();
+                p.move_to((x-16.75,y+53.25));
+                p.curve_to((x-24.15,y-4.65),(x+80.65,y-32.25),(x+109.5,y+25.75));
+                p.curve_to((x+151.45,y+80.25),(x+82.25,y+131.2),(x+18.05,y+109.5));
+                p.quad_to((x-23.25,y+96.85),(x-16.75,y+53.25));
+                p.close_path();
+                ctx.set_paint(css::MAGENTA);
+                ctx.fill_path(&p);
+            },
+            _=>{
+                let mut p=BezPath::new();
+                p.move_to((182.125,326.375));
+                p.curve_to((208.625,271.125),(306.375,428.625),(366.125,343.375));
+                p.quad_to((321.875,258.625),(182.125,326.375));
+                ctx.set_stroke(Stroke::new(13.25));
+                ctx.set_paint(css::MAGENTA);
+                ctx.stroke_path(&p);
+            }
+        }
+        if entry[6]!=0.0 {ctx.pop_clip();}
+        ctx.pop_layer(); // independent source opacity
+        ctx.pop_layer(); // blend group
+    }
+    ctx.flush();
+    let mut target=Pixmap::new(width,height);
+    ctx.render(&mut target,&mut res);
+    let mut bytes=Vec::with_capacity(usize::from(width)*usize::from(height)*4);
+    for px in target.data(){bytes.extend_from_slice(&[px.r,px.g,px.b,px.a]);}
+    vello_common::pfx_trace::end();
+    bytes
+}
