@@ -18,7 +18,7 @@ The new diagnostic entrypoint `render_complex_layered` draws using pinned-source
 4. One optional irregular path clip inside those nested groups.
 5. A separate final foreground stroked curve outside the isolated groups.
 
-The five scene cases are **Normal**, **Multiply**, **Screen**, **Overlay**, and **clipped Multiply**, all with the same parent/child opacity values. The resulting color mixtures are genuinely exercised: non-normal modes change at least 245 premultiplied RGBA channels relative to the normal case on the first frame, and intermediate RGB values are present in the opaque backdrop. **Final alpha over the intentionally opaque backdrop is expected to remain 255**, so opacity is validated through blended RGB, not through a false fractional-output-alpha assertion.
+The five scene cases are **Normal**, **Multiply**, **Screen**, **Overlay**, and **clipped Multiply**, all with the same parent/child opacity values. The resulting color mixtures are genuinely exercised: comparing each of the four non-normal first frames against the normal first frame yields an **aggregate of 245–281 changed RGBA channels per canvas**; this is a combined count across modes, not a minimum for each individual blend mode. Intermediate RGB values are present in the opaque backdrop. **Final alpha over the intentionally opaque backdrop is expected to remain 255**, so opacity is validated through blended RGB, not through a false fractional-output-alpha assertion.
 
 Both original local-origin flattening and globally canonical flattening use identical layer content, masks, paint colors, clip shapes, full-canvas dimensions and render context state. Only the selected source-level geometry-origin handling differs.
 
