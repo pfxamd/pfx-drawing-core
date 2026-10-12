@@ -12,7 +12,7 @@ const server=createServer((req,res)=>{
  let f;try{f=path.resolve(root,'.'+decodeURIComponent(req.url.split('?')[0]));}
  catch{res.writeHead(400);return res.end();}
  if(!f.startsWith(root+path.sep)){res.writeHead(403);return res.end();}
- try{res.writeHead(200,{'Content-Type':f.endsWith('.wasm')?'application/wasm':f.endsWith('.js')?'application/javascript':'text/html'});res.end(readFileSync(f))}
+ try{const bytes=readFileSync(f);res.writeHead(200,{'Content-Type':f.endsWith('.wasm')?'application/wasm':f.endsWith('.js')?'application/javascript':'text/html'});res.end(bytes)}
  catch(e){res.writeHead(404);res.end(String(e));}
 });
 const canvasList=[{w:640,h:400},{w:800,h:500},{w:1024,h:640}];
