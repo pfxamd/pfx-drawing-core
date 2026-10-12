@@ -92,10 +92,13 @@ if(mode!=='3d')try{
     }
     const reference=render_complex_full(state.lastFrame);
     const pixels=ctx.getImageData(0,0,800,500).data;
-    let mismatchesDisplayed=0;
-    for(let i=0;i<reference.length;i++)if(reference[i]!==pixels[i])mismatchesDisplayed++;
+    let mismatchesDisplayed=0,maxDisplayDelta=0;
+    for(let i=0;i<reference.length;i++)if(reference[i]!==pixels[i]){
+      mismatchesDisplayed++;
+      maxDisplayDelta=Math.max(maxDisplayDelta,Math.abs(reference[i]-pixels[i]));
+    }
     return {
-      mismatchesUnion,mismatchesA,mismatchesB,mismatchesDisplayed,
+      mismatchesUnion,mismatchesA,mismatchesB,mismatchesDisplayed,maxDisplayDelta,
       subpixelAlpha,overlapPainted,channelsCompared:checks,maxDelta,alphaMismatches,differences,
       lastFrame:state.lastFrame,verificationFrames:frames
     };
