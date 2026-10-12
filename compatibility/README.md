@@ -198,3 +198,17 @@ renders over 78 transitions. All 1,376,266 changed reference pixels were covered
 and the final persistent frames match byte-exactly. This is correctness proof
 WITH fallback, not proof that those effects can be accelerated with local tiles.
 Software Vello CPU only, not merged into `main`.
+
+## Grid-phase-aligned Gaussian and mask dirty halos
+
+[Verified pinned Vello CPU halo correction](results/browser-aa-halo-precision.md)
+([all-mode pixel sweep](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38279861228)
+and [instrumented persistent-cache proof](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38280598578)).
+Unaligned padded dirty sources still diverged; a globally aligned 4px strip
+phase with a 16px source halo yielded **0 changed RGBA channels in 180 ROI
+comparisons** across miter, alpha mask, blur and masked blur scenes. Across
+78 frame transitions 354 of 360 source rasters were truly smaller than the
+canvas (120 with Gaussian effects); all 1,376,266 changed reference pixels
+were covered and persistent full-frame RGBA caches were byte-exact. These
+are scoped CPU WASM numerical results, NOT generalized halo/speed/GPU proof;
+no `main` merge.
