@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 # The instrumented Vello WASM was source-built successfully by run 38244834052
 # from the same Rust source (at commit bb3f2d5c). Reuse that exact artifact for
