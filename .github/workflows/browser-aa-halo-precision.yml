@@ -1,0 +1,70 @@
+name: Pinned Vello CPU native versus padded halo precision sweep
+on:
+  push:
+    branches:
+      - experiment/browser-aa-halo-precision
+    paths:
+      - '.github/workflows/browser-aa-halo-precision.yml'
+      - 'compatibility/browser/aa-coverage-internals/**'
+      - 'compatibility/browser/vello-complex/**'
+      - 'compatibility/browser/web/aa-precision.html'
+      - 'compatibility/browser/test-aa-halo-precision.cjs'
+      - 'compatibility/browser/boundary-effect-damage.cjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+
+# Test-only correction: reuse pinned-source WASM already built in
+# run 38275299670, fail closed on any Rust / patch / HTML source change.
+jobs:
+  browser-halo-sweep:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: pfx-vello-boundary-source-built
+          run-id: 38275299670
+          github-token: ${{ github.token }}
+          path: artifacts/vello
+      - name: Refuse stale WASM when pinned sources differ
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test "$(git hash-object compatibility/browser/vello-complex/src/lib.rs)" = 93dcac6e0107cf0e2252bc4e2726a21db92b1091
+          test "$(git hash-object compatibility/browser/vello-complex/Cargo.toml)" = 5c219a8bbcfcb8b129c24cbdcb6b7eb48f25315e
+          test "$(git hash-object compatibility/browser/aa-coverage-internals/pfx_trace.rs)" = 6242e86868b211b68fb5b3712fc6bdc4973eee0c
+          test "$(git hash-object compatibility/browser/aa-coverage-internals/patch-upstream.cjs)" = 399cfad80c72f1c945df8e9c8472a0d350c89818
+          test "$(git hash-object compatibility/browser/web/aa-precision.html)" = e767fc099cfcb73a1a146914c0029d1aa948ce82
+      - name: Assemble fully local source-built browser harness
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p artifacts/browser/web artifacts/browser/proof
+          cp compatibility/browser/web/aa-precision.html artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_complex.js artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_complex_bg.wasm artifacts/browser/web/
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+          node --check compatibility/browser/test-aa-halo-precision.cjs
+          node --check compatibility/browser/boundary-effect-damage.cjs
+      - name: Sweep true partial Vello ROI with increasing source halos and strict RGBA
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/browser/web" \
+          PFX_PROOF_DIR="$GITHUB_WORKSPACE/artifacts/browser/proof" \
+          node compatibility/browser/test-aa-halo-precision.cjs
+          test -s artifacts/browser/proof/halo-precision-summary.json
+      - name: Keep complete positive or negative browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-vello-halo-precision-proof
+          path: artifacts/browser/proof
+          if-no-files-found: ignore
