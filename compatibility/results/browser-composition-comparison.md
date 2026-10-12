@@ -4,7 +4,7 @@
 
 - **CI run:** [38230352604](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38230352604) — completed **SUCCESS**.
 - **Raw evidence:** [19-file artifact 11738515473](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38230352604/artifacts/11738515473) — 9 PNGs, 9 per-run JSONs and 1 aggregate JSON.
-- **Tested code:** \`07a7fea3c60c61119ffeadc25c453866ba056263\`.
+- **Tested code:** `07a7fea3c60c61119ffeadc25c453866ba056263`.
 - **Assertions:** 9/9 cases, 2160/2160 frames; both engine-isolation checks, zero browser errors, off-origin requests and unexpected context loss. Dynamic cube and 2D pixels were verified from screenshots. The mixed screenshot was inspected after download.
 
 The table shows **median values across 3 runs per mode**, NOT hardware measurements:
