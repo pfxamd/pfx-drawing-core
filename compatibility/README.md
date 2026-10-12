@@ -172,3 +172,15 @@ changes. Damage is selected from path-control hulls and inherited group state,
 **never the reference pixels**. Across 78 transitions and 360 actual tile
 renders, 361,272 changed pixels were all covered; canonical tile + accumulated
 cache RGBA matches full frames exactly. CPU software proof only; no main merge.
+
+## Affine group transform damage and exact partial repaint
+
+[Source-built CPU affine-group experiment](results/browser-aa-affine-group-damage.md):
+[successful 6/6 Chromium runs](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38273576817).
+Arbitrary Bézier control points are transformed by composed parent/child affine
+matrices (rotation, nonuniform scale, shear and fractional translation), with
+conservative stroke-radius expansion and propagated group invalidation.
+Over 144 transitions and 690 real WASM tile renders, **922,232 changed pixels
+were all covered and complete frame caches were byte-exact**. The original
+local-first control had 356 changed RGBA channels; canonical had zero.
+Temporary pinned Vello CPU experiment only; no GPU proof and no `main` merge.
