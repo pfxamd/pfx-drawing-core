@@ -336,3 +336,99 @@ pub fn render_complex_extended(
     vello_common::pfx_trace::end();
     data
 }
+
+// Layered color-compositing and dirty repaint proof only. Pinned-source Vello
+// CPU WASM: the same compositing stack is independently rerendered both in
+// full frame and tile frame. Mode 0=normal, 1=multiply, 2=screen,
+// 3=overlay, 4=masked layered blend. No physical GPU claim.
+#[wasm_bindgen]
+pub fn render_complex_layered(
+    canvas_width:u16, canvas_height:u16, frame:u32,
+    ox:u16, oy:u16, width:u16, height:u16,
+    mode:u8, canonical:bool
+) -> Vec<u8> {
+    if canvas_width==0 || canvas_height==0 || width==0 || height==0
+        || u32::from(ox)+u32::from(width)>u32::from(canvas_width)
+        || u32::from(oy)+u32::from(height)>u32::from(canvas_height)
+        || mode>4 { return Vec::new(); }
+    use vello_cpu::peniko::{BlendMode, Mix, Compose};
+    vello_common::pfx_trace::begin_extended(
+        ox,oy,canvas_width,canvas_height,canonical,false
+    );
+    let mut ctx=RenderContext::new(width,height);
+    let mut res=Resources::new();
+    ctx.set_transform(Affine::translate((-f64::from(ox),-f64::from(oy))));
+    // Nonempty stable backdrop, but NOT a full opaque canvas clear.
+    ctx.set_paint(css::WHITE);
+    ctx.fill_rect(&Rect::new(350.0,70.0,790.0,412.0));
+    ctx.set_paint(css::MAGENTA);
+    ctx.fill_rect(&Rect::new(395.0,122.0,765.0,375.0));
+    let t=f64::from(frame);
+    let x=480.45+12.0*(t*0.061).sin();
+    let y=145.15+7.0*(t*0.037).cos();
+    let mut a=BezPath::new();
+    a.move_to((x,y+55.0));
+    a.curve_to((x-10.15,y+5.25),(x+78.75,y-28.65),(x+112.35,y+15.55));
+    a.curve_to((x+157.45,y+64.05),(x+88.85,y+118.25),(x+28.2,y+100.3));
+    a.quad_to((x-15.65,y+85.45),(x,y+55.0));
+    a.close_path();
+
+    let bx=608.65+14.0*(t*0.073).cos();
+    let by=202.35+9.0*(t*0.047).sin();
+    let mut b=BezPath::new();
+    b.move_to((bx-16.75,by+53.25));
+    b.curve_to((bx-24.15,by-4.65),(bx+80.65,by-32.25),(bx+109.5,by+25.75));
+    b.curve_to((bx+151.45,by+80.25),(bx+82.25,by+131.2),(bx+18.05,by+109.5));
+    b.quad_to((bx-23.25,by+96.85),(bx-16.75,by+53.25));
+    b.close_path();
+
+    // Render parent/group opacity separately from paint alpha; this tests the
+    // actual Vello layer buffer including its origin-dependent isolation.
+    ctx.push_opacity_layer(0.71);
+    ctx.set_paint(css::WHITE);
+    ctx.fill_path(&a);
+
+    let mix=match mode {
+        1=>Mix::Multiply, 2=>Mix::Screen, 3=>Mix::Overlay,
+        4=>Mix::Multiply, _=>Mix::Normal,
+    };
+    ctx.push_blend_layer(BlendMode { mix, compose:Compose::SrcOver });
+    ctx.push_opacity_layer(0.59);
+    if mode==4 {
+        let mut clip=BezPath::new();
+        clip.move_to((438.375,174.125));
+        clip.curve_to((498.625,102.375),(727.625,138.125),(771.875,240.375));
+        clip.curve_to((800.125,345.375),(606.375,387.125),(455.625,304.875));
+        clip.quad_to((411.375,248.625),(438.375,174.125));
+        clip.close_path();
+        ctx.push_clip_path(&clip);
+    }
+    ctx.set_paint(css::MAGENTA);
+    ctx.fill_path(&b);
+    ctx.set_stroke(Stroke::new(9.375));
+    ctx.set_paint(css::WHITE);
+    let mut line=BezPath::new();
+    line.move_to((438.125,309.375));
+    line.curve_to((492.625,182.125),(647.375,392.875),(753.875,214.625));
+    ctx.stroke_path(&line);
+    if mode==4 {ctx.pop_clip();}
+    ctx.pop_layer(); // opacity 0.59
+    ctx.pop_layer(); // blend mode
+    ctx.pop_layer(); // parent opacity 0.71
+
+    // A late top-level stroke exposes compositing interactions with grouped
+    // alpha, especially when it crosses the moving geometry.
+    ctx.set_paint(css::WHITE);
+    ctx.set_stroke(Stroke::new(4.375));
+    let mut top=BezPath::new();
+    top.move_to((420.125,365.75));
+    top.quad_to((607.625,296.875),(767.375,400.125));
+    ctx.stroke_path(&top);
+    ctx.flush();
+    let mut target=Pixmap::new(width,height);
+    ctx.render(&mut target,&mut res);
+    let mut data=Vec::with_capacity(usize::from(width)*usize::from(height)*4);
+    for px in target.data(){data.extend_from_slice(&[px.r,px.g,px.b,px.a]);}
+    vello_common::pfx_trace::end();
+    data
+}
