@@ -108,3 +108,13 @@ Every one of 55 observed alpha differences (per round) was present in the
 actual pre-u8 Vello strip mask, with differing flattened f32 line coordinates.
 Precise arithmetic attribution and a universal pixel-exact solution remain open.
 Upstream patches exist only in the temporary source-build experiment.
+
+## Canonical global flattening: verified exactness in isolated fills
+
+[Verified Vello CPU global-flatten proof](results/browser-aa-global-flatten.md):
+[6/6 expanded-ROI browser tests](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38252702790) succeeded.
+For the sampled full-frame versus three independently rerasterized dirty regions,
+**453 baseline differing RGBA channels became zero** (per browser context).
+Runtime medians were 0.3ms for both partial strategies on this runner.
+This is a fixed 800x500 experimental scene with filled paths only; it is not a
+general clipping/damage solution or real-GPU evidence. No main merge.
