@@ -90,3 +90,12 @@ cases across six transforms and three fresh contexts. 0/8/16/32px padding
 never achieved byte-exact equality; raw premultiplied pixels already differ
 slightly, with maximum channel deviation 1/255. No claim of hardware GPU
 performance or a final renderer selection.
+
+## Single-path antialiasing origin diagnosis
+
+[Verified Vello AA origin experiment](results/browser-aa-origin-trace.md):
+24/24 browser cases in [run 38247153296](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38247153296).
+Independent single filled Bézier paths already show sparse 1/255 alpha differences;
+integer-aligned rectangles do not. The two Vello CPU fine-compositing precision
+modes produce identical discrepancy counts. Flatten/strip coverage is the next
+investigation target. No GPU performance claims, no main merge.

@@ -3,6 +3,11 @@ on:
   push:
     branches:
       - experiment/browser-aa-origin-trace
+    # Do not rerun passed coverage experiments for documentation-only pushes.
+    paths:
+      - 'compatibility/browser/vello-complex/**'
+      - 'compatibility/browser/web/aa-precision.html'
+      - 'compatibility/browser/test-aa-origin-trace.cjs'
   workflow_dispatch:
 
 permissions:
@@ -26,6 +31,12 @@ jobs:
           run-id: 38246676286
           github-token: ${{ github.token }}
           path: artifacts/vello
+      - name: Reject a stale replay artifact after Rust-source changes
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test "$(git hash-object compatibility/browser/vello-complex/src/lib.rs)" = dd3ceb788bb8963217939dafc039ecb7c23820ba
+          test "$(git hash-object compatibility/browser/vello-complex/Cargo.toml)" = cad9d592eabf3432c4376ea670d4401c3c39a1ad
       - name: Assemble independent browser proof
         shell: bash
         run: |
