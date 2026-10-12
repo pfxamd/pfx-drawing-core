@@ -10,6 +10,8 @@ on:
       - 'compatibility/browser/web/aa-precision.html'
       - 'compatibility/browser/test-aa-halo-precision.cjs'
       - 'compatibility/browser/test-aa-grid-phase.cjs'
+      - 'compatibility/browser/test-aa-grid-repaint.cjs'
+      - 'compatibility/browser/boundary-effect-halo-damage.cjs'
       - 'compatibility/browser/boundary-effect-damage.cjs'
   workflow_dispatch:
 permissions:
@@ -54,6 +56,8 @@ jobs:
           npx playwright install --with-deps chromium
           node --check compatibility/browser/test-aa-halo-precision.cjs
           node --check compatibility/browser/test-aa-grid-phase.cjs
+          node --check compatibility/browser/test-aa-grid-repaint.cjs
+          node --check compatibility/browser/boundary-effect-halo-damage.cjs
           node --check compatibility/browser/boundary-effect-damage.cjs
       - name: Sweep true partial Vello ROI with increasing source halos and strict RGBA
         shell: bash
@@ -65,6 +69,10 @@ jobs:
           PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/browser/web" \
           PFX_PROOF_DIR="$GITHUB_WORKSPACE/artifacts/browser/proof" \
           node compatibility/browser/test-aa-grid-phase.cjs
+          PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/browser/web" \
+          PFX_PROOF_DIR="$GITHUB_WORKSPACE/artifacts/browser/proof" \
+          node compatibility/browser/test-aa-grid-repaint.cjs
+          test -s artifacts/browser/proof/grid-repaint-summary.json
           test -s artifacts/browser/proof/halo-precision-summary.json
           test -s artifacts/browser/proof/grid-phase-summary.json
       - name: Keep complete positive or negative browser evidence
