@@ -9,13 +9,19 @@ canvas{display:block;width:800px;height:500px}
 <body><canvas id="output" width="800" height="500"></canvas>
 <script type="module">
 try {
-  const { default: init, render_complex_probe, render_complex_full, render_complex_origin_trace } = await import('./pfx_vello_complex.js');
+  const { default: init, render_complex_probe, render_complex_full, render_complex_origin_trace,
+    render_complex_intermediate, intermediate_lines, intermediate_coverages,
+    intermediate_truncated } = await import('./pfx_vello_complex.js');
   await init();
   const ctx = document.getElementById('output').getContext('2d', {willReadFrequently:true});
   window.PFX_AA = {
     ready:true,
     render:render_complex_probe,
     trace:render_complex_origin_trace,
+    intermediate:render_complex_intermediate,
+    traceLines:intermediate_lines,
+    traceCoverage:intermediate_coverages,
+    traceTruncated:intermediate_truncated,
     originalRender:render_complex_full,
     display(frame, zoom, rotation, dx, dy) {
       const bytes=render_complex_probe(frame,0,0,800,500,zoom,rotation,dx,dy,false);
