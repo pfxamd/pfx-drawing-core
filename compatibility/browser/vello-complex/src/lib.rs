@@ -826,3 +826,94 @@ pub fn render_complex_affine_graph(
     vello_common::pfx_trace::end();
     bytes
 }
+
+// Controlled numerical stress only: explicit sharp miter joins, a global
+// alpha mask, and optional Vello CPU Gaussian filter. The filter is known
+// to need outside-region source pixels; safe=true uses a labeled full-frame
+// fallback for filtered partial regions rather than silently claiming tiling.
+#[wasm_bindgen]
+pub fn render_complex_boundary_effect(
+    full_w:u16,full_h:u16,ox:u16,oy:u16,w:u16,h:u16,
+    matrix:Vec<f64>, mode:u8, shift:f64, width:f64, canonical:bool, safe:bool
+)->Vec<u8>{
+    if full_w==0||full_h==0||w==0||h==0
+      || u32::from(ox)+u32::from(w)>u32::from(full_w)
+      || u32::from(oy)+u32::from(h)>u32::from(full_h)
+      || matrix.len()!=6||matrix.iter().any(|v| !v.is_finite()||v.abs()>1e6)
+      || !shift.is_finite()||!width.is_finite()||width<=0.0||width>100.0
+      || mode>3 {return Vec::new();}
+    if safe&&mode>=2&&(ox!=0||oy!=0||w!=full_w||h!=full_h) {
+        // Consciously correct fallback until filter halo / source expansion is
+        // independently established. Full raster cannot be called "dirty ROI".
+        let source=render_complex_boundary_effect(
+            full_w,full_h,0,0,full_w,full_h,matrix,mode,shift,width,canonical,false
+        );
+        if source.len()!=usize::from(full_w)*usize::from(full_h)*4{return Vec::new();}
+        let mut crop=Vec::with_capacity(usize::from(w)*usize::from(h)*4);
+        for row in 0..usize::from(h) {
+            let start=((row+usize::from(oy))*usize::from(full_w)+usize::from(ox))*4;
+            crop.extend_from_slice(&source[start..start+usize::from(w)*4]);
+        }
+        return crop;
+    }
+    use vello_cpu::kurbo::Join;
+    use vello_cpu::filter_effects::{Filter,FilterFunction};
+    use vello_cpu::Mask;
+    vello_common::pfx_trace::begin_extended(ox,oy,full_w,full_h,canonical,false);
+    let mut ctx=RenderContext::new(w,h);
+    let mut res=Resources::new();
+    let local=Affine::translate((-f64::from(ox),-f64::from(oy)));
+    ctx.set_transform(local);
+    ctx.set_paint(css::WHITE);
+    ctx.fill_rect(&Rect::new(25.0,27.0,f64::from(full_w)-21.0,f64::from(full_h)-21.0));
+    let world=Affine::new([
+        matrix[0],matrix[1],matrix[2],matrix[3],matrix[4],matrix[5]
+    ]);
+    ctx.set_transform(local*world);
+    // Mask alpha is generated in absolute global coordinates for the entire
+    // target; its values are invariant under changing the dirty viewport.
+    if mode==1||mode==3 {
+        let mut alpha=Vec::with_capacity(usize::from(w)*usize::from(h));
+        let cx=506.375+shift*0.5;
+        let cy=246.125;
+        for y in 0..u32::from(h) {
+            for x in 0..u32::from(w) {
+                let ax=f64::from(ox)+f64::from(x);
+                let ay=f64::from(oy)+f64::from(y);
+                let d=((ax-cx)/165.5).powi(2)+((ay-cy)/122.75).powi(2);
+                let opacity=((1.05-d)*9.0).clamp(0.0,1.0);
+                alpha.push((opacity*255.0+0.5) as u8);
+            }
+        }
+        ctx.push_mask_layer(Mask::from_parts(alpha,w,h));
+    }
+    if mode>=2 {
+        ctx.push_filter_layer(Filter::from_function(FilterFunction::Blur{radius:5.25}));
+    }
+    ctx.set_paint(css::MAGENTA);
+    let mut path=BezPath::new();
+    path.move_to((421.125+shift,250.375));
+    path.line_to((517.625+shift,258.125));
+    path.line_to((441.375+shift,266.625));
+    path.line_to((632.125+shift,289.625));
+    ctx.set_stroke(
+        Stroke::new(width).with_join(Join::Miter).with_miter_limit(12.0)
+    );
+    ctx.stroke_path(&path);
+    let mut fill=BezPath::new();
+    fill.move_to((444.875+shift,215.625));
+    fill.curve_to((475.625+shift,161.125),(608.375+shift,183.875),(622.125+shift,259.625));
+    fill.quad_to((544.375+shift,319.125),(444.875+shift,215.625));
+    fill.close_path();
+    ctx.set_paint(css::BLUE);
+    ctx.fill_path(&fill);
+    if mode>=2{ctx.pop_layer();}
+    if mode==1||mode==3{ctx.pop_layer();}
+    ctx.flush();
+    let mut pixmap=Pixmap::new(w,h);
+    ctx.render(&mut pixmap,&mut res);
+    let mut bytes=Vec::with_capacity(usize::from(w)*usize::from(h)*4);
+    for px in pixmap.data(){bytes.extend_from_slice(&[px.r,px.g,px.b,px.a]);}
+    vello_common::pfx_trace::end();
+    bytes
+}
