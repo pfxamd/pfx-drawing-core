@@ -34,7 +34,7 @@ edit('vello_common/src/strip_generator.rs',
             &mut self.flatten_ctx,
             cull_bbox,
         );`,
-  `        let (canonical, origin_x, origin_y) = crate::pfx_trace::geometry_mode();
+  `        let (canonical, origin_x, origin_y, full_w, full_h) = crate::pfx_trace::geometry_mode();
         if canonical && (origin_x != 0 || origin_y != 0) {
             // Render the globally identical tessellation as the full canvas.
             // Keep this experimental canonical bbox fixed to the proof scene.
@@ -43,7 +43,7 @@ edit('vello_common/src/strip_generator.rs',
             )) * transform;
             flatten::fill(
                 self.level, path, absolute_transform, &mut self.line_buf,
-                &mut self.flatten_ctx, RectU16::new(0, 0, 800, 500),
+                &mut self.flatten_ctx, RectU16::new(0, 0, full_w, full_h),
             );
             // The downstream tile/strip rasterizer still works locally.
             let ox=f32::from(origin_x);
@@ -58,6 +58,45 @@ edit('vello_common/src/strip_generator.rs',
                 &mut self.flatten_ctx, cull_bbox,
             );
         }`);
+// Stroke paths must use precisely the same global flattening contract as
+// filled paths, including global line-join tessellation. This remains local
+// to the pinned upstream checkout and does not change public Vello.
+edit('vello_common/src/strip_generator.rs',
+  `        flatten::stroke(
+            self.level,
+            path,
+            stroke,
+            transform,
+            &mut self.line_buf,
+            &mut self.flatten_ctx,
+            &mut self.stroke_ctx,
+            cull_bbox,
+        );
+        self.generate_with_clip(aliasing_threshold, strip_storage, Fill::NonZero, clip_path);`,
+  `        let (canonical, origin_x, origin_y, full_w, full_h) = crate::pfx_trace::geometry_mode();
+        if canonical && (origin_x != 0 || origin_y != 0) {
+            let absolute_transform = Affine::translate((
+                f64::from(origin_x), f64::from(origin_y),
+            )) * transform;
+            flatten::stroke(
+                self.level, path, stroke, absolute_transform, &mut self.line_buf,
+                &mut self.flatten_ctx, &mut self.stroke_ctx,
+                RectU16::new(0, 0, full_w, full_h),
+            );
+            let ox=f32::from(origin_x);
+            let oy=f32::from(origin_y);
+            for line in &mut self.line_buf {
+                line.p0.x -= ox; line.p0.y -= oy;
+                line.p1.x -= ox; line.p1.y -= oy;
+            }
+        } else {
+            flatten::stroke(
+                self.level, path, stroke, transform, &mut self.line_buf,
+                &mut self.flatten_ctx, &mut self.stroke_ctx, cull_bbox,
+            );
+        }
+        crate::pfx_trace::record_lines(&self.line_buf);
+        self.generate_with_clip(aliasing_threshold, strip_storage, Fill::NonZero, clip_path);`);
 edit('vello_common/src/strip.rs',
   '            alpha_buf.extend_from_slice(u8_vals.as_slice());\n',
   `            // PFx diagnostic only: capture actual pre-u8 antialias coverage.
