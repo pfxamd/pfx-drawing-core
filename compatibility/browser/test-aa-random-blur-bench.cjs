@@ -65,9 +65,9 @@ async function check(browser,base,canvas,round){
   data=await page.evaluate(({canvas,tests,halos})=>{
    const {w,h}=canvas,api=window.PFX_AA,full={x:0,y:0,w,h};
    if(!api.ready||typeof api.boundaryRadius!=='function')throw Error('Missing source-built variable-blur export '+api.error);
-   const render=(s,r)=>{
+   const render=(s,r,safe=false)=>{
     const v=api.boundaryRadius(w,h,r.x,r.y,r.w,r.h,new Float64Array(s.m),
-       s.mode,s.shift,s.width,s.radius,true,false);
+       s.mode,s.shift,s.width,s.radius,true,safe);
     if(v.length!==r.w*r.h*4)throw Error('Unexpected WASM pixel byte count');
     return v;
    };
@@ -92,7 +92,7 @@ async function check(browser,base,canvas,round){
     }
     return {channels,maxDelta,samples};
    };
-   const summaries=[];let nonWhiteROI=0,fullCanonicalChanges=0;
+   const summaries=[];let nonWhiteROI=0,fullCanonicalChanges=0,validatedFallbacks=0,fallbackChangedChannels=0;
    const modeTiming=[];
    const time=()=>performance.now();
    function median(a){return [...a].sort((x,y)=>x-y)[Math.floor(a.length/2)];}
@@ -117,6 +117,15 @@ async function check(browser,base,canvas,round){
        attempts.push({halo,srcArea:src.w*src.h,fullSource:src.w===w&&src.h===h,
          channels:diff.channels,maxDelta:diff.maxDelta,samples:diff.samples});
       }
+      // Arbitrary variable-radius blur is NOT certified for ROI rasterization.
+      // Explicit Rust safe=true must rasterize full frame and crop. Check
+      // against independent full reference on EVERY unsafe 16px ROI.
+      if(attempts[1].channels>0){
+       const fallback=render(s,roi,true);
+       const delta=compare(reference,fallback,roi,roi);
+       fallbackChangedChannels+=delta.channels;
+       validatedFallbacks++;
+      }
       results.push({roi,signal,attempts,
        firstExactHalo:attempts.find(x=>x.channels===0)?.halo??null});
     }
@@ -138,11 +147,14 @@ async function check(browser,base,canvas,round){
      sxSyApprox:[Math.hypot(s.m[0],s.m[1]),Math.hypot(s.m[2],s.m[3])],
      results});
    }
-   return {canvas,summaries,modeTiming,nonWhiteROI,fullCanonicalChanges};
+   return {canvas,summaries,modeTiming,nonWhiteROI,fullCanonicalChanges,
+    validatedFallbacks,fallbackChangedChannels};
   },{canvas,tests,halos});
   const failures=[];
   if(data.fullCanonicalChanges!==0)failures.push('Full-frame canonical vs original changed');
   if(data.nonWhiteROI<10)failures.push('Insufficient actual nonwhite ROI coverage');
+  if(data.validatedFallbacks<1)failures.push('No unsafe region exercised');
+  if(data.fallbackChangedChannels!==0)failures.push('Full-frame fallback crop not byte exact');
   if(errors.length||outside.length)failures.push('Browser errors/external requests');
   data.status=failures.length?'FAIL':'PASS';
   data.failures=failures;data.errors=errors;data.external=outside;
@@ -155,7 +167,8 @@ async function check(browser,base,canvas,round){
    ' regions='+all.length+' '+JSON.stringify(counts)+'\n');
   return {status:data.status,canvas,round,totalStates:data.summaries.length,
    totalROIs:all.length,signal:data.nonWhiteROI,fullCanonicalChanges:data.fullCanonicalChanges,
-   failures,haloCounts:counts,
+   failures,haloCounts:counts,validatedFallbacks:data.validatedFallbacks,
+   fallbackChangedChannels:data.fallbackChangedChannels,
    byRadius:radii.map(radius=>({radius,byHalo:halos.map((halo,i)=>({
     halo,failed:data.summaries.filter(s=>s.radius===radius).flatMap(s=>s.results)
       .filter(r=>r.attempts[i].channels!==0).length}))})),
@@ -182,6 +195,8 @@ async function check(browser,base,canvas,round){
    seed,halos,radii,sizes,contexts:outputs.length,
    states:outputs.reduce((n,r)=>n+(r.totalStates||0),0),
    testedRegions:outputs.reduce((n,r)=>n+(r.totalROIs||0),0),
+   validatedFullFrameFallbacks:outputs.reduce((n,r)=>n+(r.validatedFallbacks||0),0),
+   fallbackChangedChannels:outputs.reduce((n,r)=>n+(r.fallbackChangedChannels||0),0),
    byHalo:halos.map((halo,i)=>({halo,failedROIs:outputs.reduce((n,r)=>n+(r.haloCounts?.[i].failed||0),0),
     fullCanvasSourceROIs:outputs.reduce((n,r)=>n+(r.haloCounts?.[i].fullSource||0),0)})),
    outputs,scope:[
@@ -189,6 +204,7 @@ async function check(browser,base,canvas,round){
     'All RGBA tile bytes compared to separate full scene; false halo assumptions are reported, not silently tolerated.',
     'Source ROI globally phase-aligned to 4 pixels and expanded by listed halo; full reference used only as oracle.',
     'Benchmarks are synchronous CPU WASM + buffer returns in shared GitHub Actions runners, not graphics hardware or GPU timings.',
+    'Every 16px-halo mismatch separately verifies an explicit full-frame WASM fallback and crop byte-for-byte.',
     'Exact tested cases are NOT proof of universal safe filter kernel support. No production main merge.'
    ]};
   writeFileSync(path.join(out,'random-blur-bench-summary.json'),JSON.stringify(summary,null,2)+'\n');
