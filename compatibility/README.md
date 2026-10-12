@@ -99,3 +99,12 @@ Independent single filled Bézier paths already show sparse 1/255 alpha differen
 integer-aligned rectangles do not. The two Vello CPU fine-compositing precision
 modes produce identical discrepancy counts. Flatten/strip coverage is the next
 investigation target. No GPU performance claims, no main merge.
+
+## Source-stage AA and flatten trace
+
+[Verified prequantized coverage and flattened-geometry trace](results/browser-aa-coverage-internals.md):
+[4/4 independent browser cases](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38250617769) passed.
+Every one of 55 observed alpha differences (per round) was present in the
+actual pre-u8 Vello strip mask, with differing flattened f32 line coordinates.
+Precise arithmetic attribution and a universal pixel-exact solution remain open.
+Upstream patches exist only in the temporary source-build experiment.
