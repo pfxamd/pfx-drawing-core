@@ -149,3 +149,15 @@ rendered dirty tiles were copied onto actual prior-frame RGBA buffers across
 180 transitions (540 tile renders), always matching full-frame reference.
 Damage bounds here use full-image pixel differences (oracle), NOT a production
 invalidator. Browser software-CPU WASM only, with no GPU or main merge.
+
+## Verified operation-derived dirty invalidation and lifecycle
+
+[Source-built CPU command-derived damage experiment](results/browser-aa-operation-damage.md):
+[6/6 browser/context suites](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38267410836)
+passed with 48 frame transitions, 360 true region rasterizations, **zero missed
+changed pixels and zero full-frame cache mismatches**. The local-first control
+had 120 differing RGBA channels; canonical global flatten had zero.
+Damage now comes from **old/new drawing operations**, not pixel-reference
+differences. Covered move, delete/reinsert, reorder, opacity, blend, clip and
+no-op transitions. Known geometry bounds only; this is experimental Vello CPU
+and does not establish a general renderer, GPU speedup or safe main merge.
