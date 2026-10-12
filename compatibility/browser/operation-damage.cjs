@@ -64,22 +64,23 @@ function estimateDamage(previous,current,w,h){
  const rectangles=[],causes=[];
  for(const id of new Set([...before.keys(),...after.keys()])){
   const a=before.get(id),b=after.get(id);
-  let cause;
-  if(!a)cause='insert';
-  else if(!b)cause='delete';
-  else if(a.op.kind!==b.op.kind)cause='replace';
-  else if(a.op.dx!==b.op.dx||a.op.dy!==b.op.dy)cause='move';
-  else if(a.op.opacity!==b.op.opacity)cause='opacity';
-  else if(a.op.blend!==b.op.blend)cause='blend';
-  else if(a.op.clip!==b.op.clip)cause='clip';
-  else if(a.index!==b.index)cause='reorder';
-  if(!cause)continue;
-  // In source-over group blending, altered content influences pixels only
-  // inside its old/new painted footprint. Reorder is conservative: invalidate
-  // changed indices even when two objects do not physically overlap.
+  const changes=[];
+  if(!a)changes.push('insert');
+  else if(!b)changes.push('delete');
+  else {
+   if(a.op.kind!==b.op.kind)changes.push('replace');
+   if(a.op.dx!==b.op.dx||a.op.dy!==b.op.dy)changes.push('move');
+   if(a.op.opacity!==b.op.opacity)changes.push('opacity');
+   if(a.op.blend!==b.op.blend)changes.push('blend');
+   if(a.op.clip!==b.op.clip)changes.push('clip');
+   if(a.index!==b.index)changes.push('reorder');
+  }
+  if(!changes.length)continue;
+  // Every changed layer can influence the pixels of its previous and new
+  // footprint; report all semantic changes, not only the first changed field.
   if(a){const r=boundsFor(a.op,w,h);if(r)rectangles.push(r);}
   if(b){const r=boundsFor(b.op,w,h);if(r)rectangles.push(r);}
-  causes.push({id,cause,wasPresent:!!a,isPresent:!!b,
+  for(const cause of changes)causes.push({id,cause,wasPresent:!!a,isPresent:!!b,
    orderBefore:a?.index??-1,orderAfter:b?.index??-1});
  }
  const rects=merge(rectangles);
