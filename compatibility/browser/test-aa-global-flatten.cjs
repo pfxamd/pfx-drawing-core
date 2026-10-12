@@ -28,7 +28,7 @@ const regions=[
  {name:'offset-one',x:449,y:97,w:335,h:255},
  {name:'offset-sixteen',x:432,y:80,w:352,h:272}
 ];
-const frames=[0,43,97,159],roi={x0:464,x1:776,y0:112,y1:344};
+const frames=[0,43,97,159],roi={x0:449,x1:784,y0:97,y1:352};
 async function test(browser,origin,scene,round){
  const context=await browser.newContext({viewport:{width:800,height:500},deviceScaleFactor:1});
  const page=await context.newPage();
