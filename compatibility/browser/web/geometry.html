@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PFx actual Vello geometry dirty-region test</title>
+<style>
+html,body{margin:0;padding:0;overflow:hidden;background:#071824;font:14px system-ui,sans-serif}
+#viewport{position:relative;width:800px;height:500px;background:#001a33}
+canvas{position:absolute;top:0;left:0;width:800px;height:500px}
+#hud{pointer-events:none}
+#status{position:absolute;top:60px;left:32px;color:white;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="viewport">
+  <canvas id="gpu" width="800" height="500"></canvas>
+  <canvas id="hud" width="800" height="500"></canvas>
+  <div id="status">PFx DRAWING CORE — CHANGING VECTOR GEOMETRY</div>
+</div>
+<script>
+(function(){
+  const mode=new URLSearchParams(location.search).get('mode');
+  function run(){
+    const script=document.createElement('script');
+    script.type='module';
+    script.src='./geometry.js';
+    document.body.append(script);
+  }
+  if(mode==='2d'){
+    // Never fetch or initialize Filament in this workload.
+    run();
+  }else{
+    const script=document.createElement('script');
+    script.src='./filament.js';
+    script.onload=run;
+    script.onerror=()=>{window.PFX_BOOT_ERROR='Filament failed to load';};
+    document.body.append(script);
+  }
+})();
+</script>
+</body>
+</html>
