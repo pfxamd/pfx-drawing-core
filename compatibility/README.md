@@ -138,3 +138,14 @@ fractional affine transforms on three canvas sizes remained byte-exact across
 **every pixel in each independent dirty rectangle**. Previous local-first control:
 10,846 changed RGBA channels over both contexts; global flatten: zero.
 CPU-side proof only; no GPU inference, no production adoption, no main merge.
+
+## Layered opacity/blend and sequential repaint verified
+
+[Verified Vello CPU layered repaint experiment](results/browser-aa-layered-repaint.md):
+[30/30 cases passed](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38264971384).
+Nested opacity groups, Multiply/Screen/Overlay blend and irregular clip pass full
+RGBA tile parity: baseline 1,032 changed channels, canonical zero. Independently
+rendered dirty tiles were copied onto actual prior-frame RGBA buffers across
+180 transitions (540 tile renders), always matching full-frame reference.
+Damage bounds here use full-image pixel differences (oracle), NOT a production
+invalidator. Browser software-CPU WASM only, with no GPU or main merge.
