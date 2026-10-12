@@ -980,7 +980,7 @@ pub fn render_complex_boundary_radius(
         ctx.push_mask_layer(Mask::from_parts(alpha,w,h));
     }
     if mode>=2 {
-        ctx.push_filter_layer(Filter::from_function(FilterFunction::Blur{radius}));
+        ctx.push_filter_layer(Filter::from_function(FilterFunction::Blur{radius:radius as f32}));
     }
     ctx.set_paint(css::MAGENTA);
     let mut path=BezPath::new();
