@@ -56,7 +56,7 @@ async function run(browser,origin,canvas,round){
  });
  const plans=planFor(canvas),layouts=round===1?['whole','overlap4']:['overlap4','whole'];
  const safePlans=plans.map(p=>({
-  ...p,layouts:Object.fromEntries(layouts.map(k=>[k,p.rects.flatMap(r=>pieces(r,k))]))
+  ...p,layouts:Object.fromEntries(layouts.map(k=>[k,p.fullFallback?p.rects:p.rects.flatMap(r=>pieces(r,k))]))
  }));
  const filename='r'+round+'-'+canvas.w+'x'+canvas.h;
  let report;
@@ -105,7 +105,7 @@ async function run(browser,origin,canvas,round){
    const contains=(rects,x,y)=>rects.some(r=>x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h);
    const caches=Object.fromEntries(layouts.map(k=>[k,new Uint8Array(fulls[0])]));
    const transitions=[];let totalMissed=0,totalCanonical=0,totalLegacy=0,
-    totalCacheDifferences=0,totalChanged=0,tileCalls=0,wholeFallbackCalls=0;
+    totalCacheDifferences=0,totalChanged=0,tileCalls=0,wholeFallbackCalls=0,fullInvalidationRenders=0;
    for(let i=1;i<states.length;i++){
     const p=plans[i-1],s=states[i],prev=fulls[i-1],ref=fulls[i];
     let trueChanged=0,missed=0;
@@ -128,6 +128,7 @@ async function run(browser,origin,canvas,round){
       legacy+=compare(ref,old,r,[]).channels;
       paste(caches[layout],b,r);
       rendered++;tileCalls++;
+      if(p.fullFallback && r.x===0 && r.y===0 && r.w===w && r.h===h)fullInvalidationRenders++;
       if(s.mode>=2&&(r.x||r.y||r.w!==w||r.h!==h))wholeFallbackCalls++;
      }
      const diff=compare(ref,caches[layout],base,[]);
@@ -151,7 +152,7 @@ async function run(browser,origin,canvas,round){
      safeDifferences:compare(full,safe,probe,[])});
    }
    return {canvas,round,totalMissed,totalCanonical,totalLegacy,
-     totalCacheDifferences,totalChanged,tileCalls,wholeFallbackCalls,
+     totalCacheDifferences,totalChanged,tileCalls,wholeFallbackCalls,fullInvalidationRenders,
      fullChanged,painted,transitions,probes};
   },{canvas,states,plans:safePlans,layouts,round});
   if(round===1&&canvas.w===800){
@@ -171,7 +172,7 @@ async function run(browser,origin,canvas,round){
   if(report.totalCacheDifferences!==0)failures.push('Persistent repaint cache mismatch');
   if(report.totalChanged<50||report.painted<100)failures.push('Stress scene not exercised');
   if(report.probes.some(p=>p.safeDifferences.channels!==0))failures.push('Fallback masked/filter ROI is not exact');
-  if(report.wholeFallbackCalls<1)failures.push('No full-filter fallback exercised');
+  if(report.fullInvalidationRenders<1)failures.push('No explicit full-frame invalidation exercised');
   if(errors.length||external.length)failures.push('Unexpected network/browser errors');
   report.status=failures.length?'FAIL':'PASS';report.failures=failures;
   report.errors=errors;report.external=external;
@@ -200,12 +201,13 @@ async function run(browser,origin,canvas,round){
    runs:runs.map(r=>({canvas:r.canvas,round:r.round,status:r.status,failures:r.failures,
     error:r.error,transitions:r.transitions?.length,
     misses:r.totalMissed,canonical:r.totalCanonical,cache:r.totalCacheDifferences,
-    changed:r.totalChanged,tiles:r.tileCalls,blurFallbacks:r.wholeFallbackCalls,
+    changed:r.totalChanged,tiles:r.tileCalls,blurFallbacks:r.wholeFallbackCalls,fullInvalidationRenders:r.fullInvalidationRenders,
     nativeProbes:r.probes})),
    limitations:[
     'Near-singular scales, anisotropic affine transforms, explicit miter joins (limit 12), global alpha mask and Vello CPU Gaussian blur.',
-    'Filtered damage intentionally triggers conservative full-frame invalidation; safe cropped requests render full then crop, so NOT a partial-render acceleration.',
-    'Actual Vello filter API is documented as incomplete/experimental; only single-threaded source-built CPU WASM.',
+    'Blur, isolated alpha-mask and near-singular miter changes trigger actual full-frame redraw in BOTH tile layouts, without dividing the fallback into dirty rectangles.',
+    'A separate diagnostic probe checks safe cropped blur through full-frame fallback, but main replay does not claim partial acceleration in effect-heavy cases.',
+    'Actual Vello filter API is incomplete/experimental; only single-threaded source-built CPU WASM.',
     'Mask generated from global coordinates and local mask pixel span. Full-frame references are checked only AFTER command-derived damage planning.',
     'No text, image paints, native GPU, true filter-halo incremental raster, mixed hardware composition or main merge.'
    ]};
