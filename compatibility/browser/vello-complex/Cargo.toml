@@ -8,7 +8,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-vello_cpu = { path = "../vello/vello_cpu" }
+vello_cpu = { path = "../vello/vello_cpu", features = ["f32_pipeline"] }
 wasm-bindgen = "=0.2.115"
 
 [profile.release]
