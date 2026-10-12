@@ -5,7 +5,7 @@ const {chromium}=require('playwright');
 const {createServer}=require('node:http');
 const {mkdirSync,readFileSync,writeFileSync}=require('node:fs');
 const path=require('node:path');
-const {states,estimate}=require('./boundary-effect-damage.cjs');
+const {states,rect}=require('./boundary-effect-damage.cjs');
 if(!process.env.PFX_WEBROOT||!process.env.PFX_PROOF_DIR)throw Error('Expected harness paths');
 const root=path.resolve(process.env.PFX_WEBROOT),out=path.resolve(process.env.PFX_PROOF_DIR);
 mkdirSync(out,{recursive:true});
@@ -31,12 +31,17 @@ function split(r){
 function regions(canvas,i){
  // Include EXACT previously falsifying tile origins (the four-way split of
  // semantically planned previous/current bounds), alongside independent probes.
- const damage=estimate(states[i-1],states[i],canvas.w,canvas.h);
+ // Recreate the EXACT unsafe pre-fallback layout from the negative proof,
+ // not the post-fix full-frame invalidation. These are command-derived bounds.
+ const a=rect(states[i-1],canvas.w,canvas.h),b=rect(states[i],canvas.w,canvas.h);
+ const damage=a&&b?{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),
+   w:Math.max(a.x+a.w,b.x+b.w)-Math.min(a.x,b.x),
+   h:Math.max(a.y+a.h,b.y+b.h)-Math.min(a.y,b.y)}:a||b;
  const probe=identityRegion.map(r=>({x:r.x,y:r.y,w:Math.min(r.w,canvas.w-r.x),h:Math.min(r.h,canvas.h-r.y)}));
  const original=[];
- for(const r of damage.rects){
+ for(const r of damage?[damage]:[]){
   if(r.w<=0||r.h<=0)continue;
-  const b=split(r);for(const x of b)if(x.w>0&&x.h>0)original.push(x);
+  const tiles=split(r);for(const x of tiles)if(x.w>0&&x.h>0)original.push(x);
  }
  const all=[...original,...probe].filter(r=>r.w>0&&r.h>0);
  return all.map((r,k)=>({...r,kind:k<original.length?'previous-failing-grid':'independent-probe'}));
