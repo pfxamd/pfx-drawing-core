@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PFx Drawing Core — antialiasing precision probe</title>
+<style>
+html,body{margin:0;background:#071824;color:#ecf2f8;font:14px system-ui}
+canvas{display:block;width:800px;height:500px}
+</style></head>
+<body><canvas id="output" width="800" height="500"></canvas>
+<script type="module">
+try {
+  const { default: init, render_complex_probe } = await import('./pfx_vello_complex.js');
+  await init();
+  const ctx = document.getElementById('output').getContext('2d', {willReadFrequently:true});
+  window.PFX_AA = {
+    ready:true,
+    render:render_complex_probe,
+    display(frame, zoom, rotation, dx, dy) {
+      const bytes=render_complex_probe(frame,0,0,800,500,zoom,rotation,dx,dy,false);
+      if(bytes.length!==1600000)throw Error('Unexpected full output size');
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(bytes),800,500),0,0);
+    }
+  };
+} catch (error) {
+  window.PFX_AA={ready:false,error:String(error)};
+}
+</script></body></html>
