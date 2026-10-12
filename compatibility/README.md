@@ -58,3 +58,11 @@ The sources are still fetched in compatibility builds; no engine has been adopte
 from [run 38230352604](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38230352604).
 All 9 isolated test cases passed (2160 frames). Measurements use SwiftShader,
 static Vello CPU pixels and separate canvases: no hardware GPU or shared context claim.
+
+## Per-frame 2D/3D upload pressure
+
+[Verified dynamic 2D overlay performance probe](results/browser-dynamic-overlay.md)
+completed in [run 38231641598](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38231641598).
+The full Vello CPU reraster/upload each frame caused repeated delayed RAF callbacks
+alongside Filament on SwiftShader; cached 2D motion did not. This is **not a hardware GPU
+benchmark** or proof of shared contexts. The final rendering-engine decision remains open.

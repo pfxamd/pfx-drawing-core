@@ -1,6 +1,49 @@
 # Per-frame 2D updates alongside animated Filament 3D
 
-**Status: not yet verified by GitHub Actions.**
+## Verified browser outcome — 2026-10-12
+
+- [GitHub Actions run 38231641598](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38231641598) — **SUCCESS**, no hidden test failures.
+- [37-file evidence artifact 11739545018](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38231641598/artifacts/11739545018) — 18 screenshots, 18 JSON run measurements, one aggregate JSON.
+- Tested commit: `4e87fb65084592faa47b1a53bdfde01915e50de7`.
+- **18 / 18 scenarios passed, 3240 / 3240 animation frames**. Assertions include independent
+  2D/3D loading, Vello alpha, moving 2D pixels, moving Filament cube, proper RGBA
+  upload counts, external traffic isolation, and unexpected WebGL context losses (zero).
+- Real `r3-mixed-reraster-motion.png` was opened and inspected after extracting the CI
+  artifact. The rendering shows Vello magenta and white painting correctly overlapping
+  the Filament perspective cube.
+
+**Aggregates:** median of per-scenario p95 values across 3 runs in the **software-rendered** CI browser.
+
+| Workload | Frames | Whole-frame CPU work p95 | RAF callback interval p95 | Vello raster call p95 | Upload call p95 | Intervals >24 ms |
+|---|---:|---:|---:|---:|---:|---:|
+| 3D only | 540 | 0.9 ms | 16.8 ms | — | — | 3 |
+| 3D + static Vello | 540 | 1.5 ms | 16.8 ms | 6.7 ms (initial) | 2.9 ms (initial) | 3 |
+| 3D + cached moving Vello | 540 | 0.5 ms | 16.7 ms | 6.9 ms (initial) | 2.8 ms (initial) | 3 |
+| 3D + full Vello reraster/upload every frame | 540 | 11.4 ms | **50.0 ms** | 6.3 ms | 2.2 ms | **132** |
+| 2D cached motion only | 540 | 0.2 ms | 16.8 ms | 8.2 ms (initial) | 2.9 ms (initial) | 0 |
+| 2D full reraster/upload every frame | 540 | 8.2 ms | 16.8 ms | 5.7 ms | 0.3 ms | 2 |
+
+The moving, fully rerasterized mixed case invoked Vello **543 times** and issued
+**543 full 1.6 MB RGBA uploads** across 3 runs: **868,800,000 bytes** in total
+(count includes each scenario's first static initialization image).
+Each of the three runs had 28–56 intervals above 24 ms, so the long callback gaps
+were observed repeatedly and were not a single one-off outlier.
+
+**Interpretation:** continuously regenerating/uploading the unchanged Vello source
+painting adds nontrivial CPU work, and the *combined* SwiftShader software workload
+exhibited substantially longer animation callback intervals than either cached motion
+or 2D-only regeneration in this small CI sample. The tested static and cached strategies
+showed no comparable recurring stalls. This identifies the **per-frame full-frame
+CPU raster → copy → Canvas2D upload path as a performance risk** under the tested
+conditions. It does *not* identify the underlying GPU compositor as the cause:
+WebGL2 is software-rendered, Chromium scheduling may interfere, the source image
+is not vector-animated, and direct browser-compositor/GPU measurements were not taken.
+
+**Next gate:** update actual Vello geometry each frame and test partial dirty regions,
+then verify GPU device workload, timing, full memory and composition on real hardware
+before comparing candidate architectures. None of these experiments selects or approves
+an engine or warrants a merge to the main branch.
+
 
 This experiment extends the previously verified
 [isolated-vs-mixed browser benchmark](browser-composition-comparison.md)
