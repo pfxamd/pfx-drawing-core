@@ -237,7 +237,8 @@ pub fn intermediate_truncated() -> bool {
 }
 
 // Extended diagnostic only. Scene flags: 1 = filled Bézier paths,
-// 2 = stroked Bézier path, 4 = freeform clip on the scene. No feature is
+// 2 = stroked Bézier path, 4 = freeform clip, 8 = secondary nested clip,
+// 16 = offscreen geometry that crosses full-scene boundaries. No feature is
 // enabled without a selected flag. All global geometry is identical between
 // full and independent dirty subregion rendering.
 #[wasm_bindgen]
@@ -252,7 +253,7 @@ pub fn render_complex_extended(
         (u32::from(oy)+u32::from(height)>u32::from(canvas_height)) ||
         !zoom.is_finite() || !(0.5..=2.0).contains(&zoom) ||
         !rotation.is_finite() || !dx.is_finite() || !dy.is_finite() ||
-        scene & !7 != 0 || (scene & 3)==0 {
+        scene & !31 != 0 || (scene & 19)==0 {
         return Vec::new();
     }
     vello_common::pfx_trace::begin_extended(
@@ -275,6 +276,17 @@ pub fn render_complex_extended(
         clip.close_path();
         ctx.push_clip_path(&clip);
     }
+    if scene & 8 != 0 {
+        // A second independent path clip nested inside the first. Fractional
+        // edges intersect curved source geometry at non-tile-aligned pixels.
+        let mut inner=BezPath::new();
+        inner.move_to((478.875,147.375));
+        inner.curve_to((542.625,112.875),(737.125,172.625),(746.375,231.125));
+        inner.curve_to((764.625,318.875),(626.125,359.375),(509.625,309.125));
+        inner.quad_to((456.375,241.625),(478.875,147.375));
+        inner.close_path();
+        ctx.push_clip_path(&inner);
+    }
     if scene & 1 != 0 {
         let t=f64::from(frame);
         blob_a(&mut ctx,t,0.0,0.0,true);
@@ -289,6 +301,30 @@ pub fn render_complex_extended(
         ctx.set_paint(css::MAGENTA);
         ctx.stroke_path(&p);
     }
+    if scene & 16 != 0 {
+        // The input path is larger than the entire canvas, with segments
+        // on both sides of its boundaries. Tile-first clipping and winding
+        // handling can change when the path's visible intersection is small.
+        let cw=f64::from(canvas_width);
+        let ch=f64::from(canvas_height);
+        let mut spanning=BezPath::new();
+        spanning.move_to((-163.375, ch * 0.285));
+        spanning.curve_to((-115.625,-88.375),(cw * 0.64, -76.625),(cw+137.125,ch*0.33));
+        spanning.curve_to((cw+196.875,ch*0.88),(cw*0.78,ch+120.375),(-69.125,ch+86.875));
+        spanning.curve_to((-194.375,ch*0.77),(-152.125,ch*0.47),(-163.375,ch*0.285));
+        spanning.close_path();
+        ctx.set_paint(css::MAGENTA);
+        ctx.fill_path(&spanning);
+        // A second contour crossing the right edge and canvas bottom.
+        let mut rim=BezPath::new();
+        rim.move_to((cw*0.56,-111.125));
+        rim.curve_to((cw+86.875,24.625),(cw+151.125,ch*0.79),(cw*0.72,ch+93.375));
+        rim.quad_to((cw*0.48,ch*0.66),(cw*0.56,-111.125));
+        rim.close_path();
+        ctx.set_paint(css::WHITE);
+        ctx.fill_path(&rim);
+    }
+    if scene & 8 != 0 {ctx.pop_clip();}
     if scene & 4 != 0 {ctx.pop_clip();}
     ctx.flush();
     let mut target=Pixmap::new(width,height);
