@@ -141,14 +141,14 @@ async function verify(browser,origin,canvas,round){
      const t=performance.now();render(53+i,item[1],primary,xf,item[2]);
      times[item[0]].push(performance.now()-t);
    }
-   const performance={};
+   const timingStats={};
    for(const [k,values]of Object.entries(times)){
     values.sort((a,b)=>a-b);
-    performance[k]={samples:values.length,medianMs:values[Math.floor(values.length/2)],
+    timingStats[k]={samples:values.length,medianMs:values[Math.floor(values.length/2)],
      p95Ms:values[Math.ceil(values.length*.95)-1],
      rgbaBytesPerCall:(k==='full'?canvas.width*canvas.height*4:tile[2]*tile[3]*4)};
    }
-   return {canvas,round,bounds,cases,performance,fullReferenceChanged,
+   return {canvas,round,bounds,cases,performance:timingStats,fullReferenceChanged,
     totalReferenceColoredPixels,totalPixelsCompared,errors};
   },{canvas,modes,transforms,frames,round});
   if(round===1&&canvas.width===800){
