@@ -28,8 +28,6 @@ const scenes=[
   {name:'rotation',zoom:1,rotation:0.09,dx:0,dy:0},
   {name:'combined',zoom:0.95,rotation:-0.07,dx:0.5,dy:0.25},
 ];
-const median=a=>{const s=[...a].sort((x,y)=>x-y);return s[Math.floor(s.length/2)]};
-const p95=a=>{const s=[...a].sort((x,y)=>x-y);return s[Math.ceil(s.length*0.95)-1]};
 
 async function scenario(browser, origin, spec, round) {
   const context=await browser.newContext({viewport:{width:800,height:500},deviceScaleFactor:1});
@@ -160,8 +158,11 @@ async function scenario(browser, origin, spec, round) {
           raster(frame,r,false);
           durations.push(performance.now()-started);
         }
+        const sorted=[...durations].sort((a,b)=>a-b);
         timings[String(pad)]={
-          samples:durations.length,medianMs:median(durations),p95Ms:p95(durations),
+          samples:durations.length,
+          medianMs:sorted[Math.floor(sorted.length/2)],
+          p95Ms:sorted[Math.ceil(sorted.length*0.95)-1],
           pixels:r.w*r.h,rgbaBytesPerCall:r.w*r.h*4
         };
       }
