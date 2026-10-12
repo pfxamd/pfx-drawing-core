@@ -66,3 +66,11 @@ completed in [run 38231641598](https://github.com/pfxamd/pfx-drawing-core/action
 The full Vello CPU reraster/upload each frame caused repeated delayed RAF callbacks
 alongside Filament on SwiftShader; cached 2D motion did not. This is **not a hardware GPU
 benchmark** or proof of shared contexts. The final rendering-engine decision remains open.
+
+## Pixel-exact real vector geometry dirty-region test
+
+[Verified Vello changing-vector dirty-region benchmark](results/browser-geometry-dirty.md):
+all 15 cases passed (2700 frames), final full-frame RGBA output byte-identical
+in both drawing strategies. [CI run 38234646339](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38234646339).
+The result concerns only Vello CPU-WASM and the separate Canvas2D/WebGL2
+software-composited experimental browser pathway, not actual GPU memory or throughput.

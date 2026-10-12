@@ -1,6 +1,56 @@
 # Real changing Vello geometry: full frame versus dirty tile
 
-**Status: experimental source prepared; no performance claims until a successful CI run.**
+## Verified outcome — 2026-10-12
+
+[GitHub Actions run 38234646339](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38234646339)
+completed **SUCCESS**, with both the pinned-source Vello CPU WebAssembly build and Chromium
+benchmark jobs successful. Test commit: `6b8be93d4e4da3c1e8950d7d0ee113afca052821`.
+
+- **15/15 cases passed, 2700/2700 frames**, covering 3 independent fresh contexts per mode.
+- **All 12 Vello-containing cases** passed the 4 independently rerendered full-vs-tile
+  reference frames and the **complete final 800 × 500 Canvas2D comparison** with
+  **0 different RGBA bytes**. Old painted geometry was erased rather than leaving trails.
+- Actual browser screenshot `r3-mixed-dirty.png` was extracted from the
+  [31-file browser evidence](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38234646339/artifacts/11740910094)
+  and visually inspected: correct dynamic magenta/white Vello geometry, the real
+  perspective Filament cube and a magenta bar visibly drawn across it.
+- [Source-built Vello WASM binaries and build logs](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38234646339/artifacts/11739913081)
+  are retained separately.
+
+**Median of per-run p95 observations across 3 runs, measured in milliseconds:**
+
+| Scenario | Callback frames | Total per-frame CPU work p95 | RAF callback interval p95 | Vello raster call p95 | Canvas2D upload call p95 | Callback intervals >24ms |
+|---|---:|---:|---:|---:|---:|---:|
+| 3D-only | 540 | 0.4 | 16.8 | — | — | 2 |
+| 2D full | 540 | 5.8 | 16.8 | 1.6 | 1.5 | 0 |
+| 2D dirty | 540 | **1.0** | 16.7 | 0.2 | 0.8 | 0 |
+| 2D + 3D full | 540 | 8.3 | 16.8 | 3.4 | 3.6 | 4 |
+| 2D + 3D dirty | 540 | **3.3** | 16.7 | 0.3 | 1.8 | 3 |
+
+| Data handed to Canvas2D from Vello across each three-run scenario | Full updates | Dirty updates |
+|---|---:|---:|
+| RGBA bytes, including 3 initial full draws | 868,800,000 | 65,280,000 |
+| Reduction | — | **92.49%** |
+
+Each full update returns **1,600,000 RGBA bytes**; each dirty update returns
+**112,000 bytes**. The dirty sequence additionally uses **one initial full-frame render**
+per run. Counts exclude any browser-internal copies or hardware graphics-bus transfers.
+
+**Result:** in this controlled, small, integer-aligned moving rectangle scene,
+rebuilding and uploading only the changed Vello tile preserves exact visible pixel
+output while reducing observed per-frame CPU work, even alongside the same 3D animation.
+The median p95 combined frame-work measurement fell from **8.3 ms to 3.3 ms**
+(approximately 60% lower for this specific test workload).
+
+**Critical boundaries:** This is **source-built Vello CPU-WASM plus Filament WebGL2
+on Chromium SwiftShader**, not a hardware GPU benchmark, shared device, GPU completion
+measurement, compositor trace, arbitrary-shape clipping solution or retained scene-graph
+implementation. A smaller `putImageData` input does **not** prove a proportional
+reduction in browser-internal GPU traffic or VRAM usage. Reproducing on physical GPU
+and with antialiasing / overlapping dirty regions and complex shapes is still required.
+
+**Decision:** keep all candidates experimental; no promotion to main.
+
 
 ## Setup
 
