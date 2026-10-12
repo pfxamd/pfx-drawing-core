@@ -126,12 +126,16 @@ async function run(browser,origin,canvas,round){
      });
      for(let frameIndex=0;frameIndex<frames.length;frameIndex++){
       const frame=frames[frameIndex],full=fulls[frameIndex];
-      let partialPixels=0;
+      let partialPixels=0,opacityBlendPixels=0;
       for(let i=3;i<full.length;i+=4){
        if(full[i])totalPaintedPixels++;
        if(full[i]>0&&full[i]<255)partialPixels++;
+       // Opacity over an OPAQUE white/magenta backdrop changes RGB, not alpha.
+       // Affected fully opaque pixels have intermediate green values.
+       if(full[i]===255 && full[i-3]===255 && full[i-1]===255 &&
+          full[i-2]>0 && full[i-2]<255)opacityBlendPixels++;
       }
-      const frameStat={frame,partialAlphaPixels:partialPixels,old:empty(),canonical:empty()};
+      const frameStat={frame,partialAlphaPixels:partialPixels,opacityBlendPixels,old:empty(),canonical:empty()};
       for(const r of tiles){
        const before=render(frame,r,id,false),after=render(frame,r,id,true);
        const oldDiff=scan(full,before,r,[]);
@@ -213,7 +217,7 @@ async function run(browser,origin,canvas,round){
     if(c.controlFullChanges!==0)failures.push(c.name+' changed full frame');
     if(c.directCanonical.changedChannels!==0)failures.push(c.name+' subregion mismatch');
     if(c.sequentialErrors!==0)failures.push(c.name+' repaint mismatch');
-    if(!c.directFrames.some(f=>f.partialAlphaPixels>100))failures.push(c.name+' no fractional alpha');
+    if(!c.directFrames.some(f=>f.opacityBlendPixels>100))failures.push(c.name+' opacity did not mix RGB over opaque backdrop');
   }
   if(errors.length||external.length)failures.push('Browser/network failure');
   result.status=failures.length?'FAIL':'PASS';result.failures=failures;
@@ -252,7 +256,7 @@ async function run(browser,origin,canvas,round){
        rasterizedDamagePx:c.rasterizedDamagePx}))})),
    scope:[
      'Source-built pinned Vello CPU WASM, no hardware GPU measurements.',
-     'Actual layers: parent opacity 0.71, nested blend group and opacity 0.59, optional path clip.',
+     'Actual layers: parent opacity 0.71, nested blend group and opacity 0.59, optional path clip; final alpha is opaque over the white/magenta backdrop and RGB shows the opacity effect.',
      'Each region compares all RGBA channels and all pixels of its own extent.',
      'Sequential buffers start from first full reference only, then copy separate true WASM dirty renders.',
      'Damage rectangle conservatively derived from exact pixel differences of the full reference: oracle, not automatic scene damage detection.',
