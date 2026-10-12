@@ -62,6 +62,8 @@ jobs:
           PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/browser/web" \
           PFX_PROOF_DIR="$GITHUB_WORKSPACE/artifacts/browser/proof" \
           node compatibility/browser/test-aa-halo-precision.cjs
+          PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/browser/web" \
+          PFX_PROOF_DIR="$GITHUB_WORKSPACE/artifacts/browser/proof" \
           node compatibility/browser/test-aa-grid-phase.cjs
           test -s artifacts/browser/proof/halo-precision-summary.json
           test -s artifacts/browser/proof/grid-phase-summary.json
