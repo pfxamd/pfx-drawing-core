@@ -65,14 +65,34 @@ fn blob_b(ctx: &mut RenderContext, t: f64, _ox: f64, _oy: f64) {
     ctx.fill_path(&overlap);
 }
 
-fn render(step: u32, ox: u16, oy: u16, width: u16, height: u16) -> Vec<u8> {
+// An instrumented entrypoint with arbitrary raster origins and a global scene transform.
+ // Keep the production experiment's original entrypoints bit-for-bit comparable.
+fn render_variant(
+    step: u32, ox: u16, oy: u16, width: u16, height: u16,
+    zoom: f64, rotation: f64, dx: f64, dy: f64, premultiplied: bool,
+) -> Vec<u8> {
+    if width == 0 || height == 0 ||
+       u32::from(ox) + u32::from(width) > u32::from(FULL_W) ||
+       u32::from(oy) + u32::from(height) > u32::from(FULL_H) ||
+       !zoom.is_finite() || zoom <= 0.0 || !rotation.is_finite() ||
+       !dx.is_finite() || !dy.is_finite() { return Vec::new(); }
     let mut ctx = RenderContext::new(width, height);
     let mut res = Resources::new();
     let (ox, oy) = (f64::from(ox), f64::from(oy));
     // Preserve globally identical cubic/quad path coordinates. The renderer
     // applies a translation to each tile, instead of JS/Rust rebuilding
     // differently-rounded local path control points.
-    ctx.set_transform(Affine::translate((-ox, -oy)));
+    let mut scene_transform = Affine::translate((-ox, -oy));
+    if zoom != 1.0 || rotation != 0.0 || dx != 0.0 || dy != 0.0 {
+        // Apply geometry transformation in global scene coordinates first.
+        // The raster's independent tile origin is always the outer translation.
+        scene_transform = scene_transform
+            * Affine::translate((620.0 + dx, 220.0 + dy))
+            * Affine::rotate(rotation)
+            * Affine::scale(zoom)
+            * Affine::translate((-620.0, -220.0));
+    }
+    ctx.set_transform(scene_transform);
     // Rebuild the complete ordered scene even for overlapping tiles.
     ctx.set_paint(css::WHITE);
     rect(&mut ctx, 24.0, 24.0, 231.0, 7.0, ox, oy);
@@ -92,7 +112,9 @@ fn render(step: u32, ox: u16, oy: u16, width: u16, height: u16) -> Vec<u8> {
     ctx.render(&mut target, &mut res);
     let mut result = Vec::with_capacity(usize::from(width) * usize::from(height) * 4);
     for px in target.data() {
-        let (r, g, b) = if px.a == 0 {
+        let (r, g, b) = if premultiplied {
+            (px.r, px.g, px.b)
+        } else if px.a == 0 {
             (0, 0, 0)
         } else {
             let a = u32::from(px.a);
@@ -102,6 +124,21 @@ fn render(step: u32, ox: u16, oy: u16, width: u16, height: u16) -> Vec<u8> {
         result.extend_from_slice(&[r, g, b, px.a]);
     }
     result
+}
+
+fn render(step: u32, ox: u16, oy: u16, width: u16, height: u16) -> Vec<u8> {
+    render_variant(step, ox, oy, width, height, 1.0, 0.0, 0.0, 0.0, false)
+}
+
+// Pixel diagnostic: raw Vello premultiplied RGBA versus its exported
+// straight-alpha conversion, evaluated with the exact same global transforms.
+// The caller crops padded outputs back to its requested dirty region.
+#[wasm_bindgen]
+pub fn render_complex_probe(
+    frame: u32, ox: u16, oy: u16, width: u16, height: u16,
+    zoom: f64, rotation: f64, dx: f64, dy: f64, premultiplied: bool
+) -> Vec<u8> {
+    render_variant(frame, ox, oy, width, height, zoom, rotation, dx, dy, premultiplied)
 }
 
 #[wasm_bindgen]
