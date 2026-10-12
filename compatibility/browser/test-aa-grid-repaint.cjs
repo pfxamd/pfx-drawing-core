@@ -67,7 +67,9 @@ async function run(browser,origin,canvas,round){
   report=await page.evaluate(({canvas,states,plans,layouts,round})=>{
    const api=window.PFX_AA;if(!api.ready||typeof api.boundaryEffect!=='function')throw Error('WASM missing '+api.error);
    const {w,h}=canvas,base={x:0,y:0,w,h};
-   const render=(state,r,canonical,safe)=>{
+   const render=(state,r,canonical,_unusedSafeFlag)=>{
+    // The old safe flag is deliberately ignored: full-frame fallback is
+    // forbidden in this proof; renderer safe=false is always passed.
     // True padded source-render: a 16px halo, aligned to Vello's 4px strip
     // grid in global coordinates. Only r is copied into the cached frame.
     const grid=4,pad=16;
@@ -119,7 +121,7 @@ async function run(browser,origin,canvas,round){
    const contains=(rects,x,y)=>rects.some(r=>x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h);
    const caches=Object.fromEntries(layouts.map(k=>[k,new Uint8Array(fulls[0])]));
    const transitions=[];let totalMissed=0,totalCanonical=0,totalLegacy=0,
-    totalCacheDifferences=0,totalChanged=0,tileCalls=0,wholeFallbackCalls=0,fullInvalidationRenders=0,
+    totalCacheDifferences=0,totalChanged=0,tileCalls=0,partialFilterTargetTiles=0,fullInvalidationRenders=0,
     fullSourceTiles=0,partialSourceTiles=0,partialGaussianSourceTiles=0,
     sourcePixelsRendered=0,targetPixelsUpdated=0;
    for(let i=1;i<states.length;i++){
@@ -155,7 +157,7 @@ async function run(browser,origin,canvas,round){
       paste(caches[layout],b,r);
       rendered++;tileCalls++;
       if(p.fullFallback && r.x===0 && r.y===0 && r.w===w && r.h===h)fullInvalidationRenders++;
-      if(s.mode>=2&&(r.x||r.y||r.w!==w||r.h!==h))wholeFallbackCalls++;
+      if(s.mode>=2&&(r.x||r.y||r.w!==w||r.h!==h))partialFilterTargetTiles++;
      }
      const diff=compare(ref,caches[layout],base,[]);
      totalCacheDifferences+=diff.channels;totalLegacy+=legacy;totalCanonical+=canonical;
@@ -178,7 +180,7 @@ async function run(browser,origin,canvas,round){
      safeDifferences:compare(full,safe,probe,[])});
    }
    return {canvas,round,totalMissed,totalCanonical,totalLegacy,
-     totalCacheDifferences,totalChanged,tileCalls,wholeFallbackCalls,fullInvalidationRenders,
+     totalCacheDifferences,totalChanged,tileCalls,partialFilterTargetTiles,fullInvalidationRenders,
      fullSourceTiles,partialSourceTiles,partialGaussianSourceTiles,
      sourcePixelsRendered,targetPixelsUpdated,fullChanged,painted,transitions,probes};
   },{canvas,states,plans:safePlans,layouts,round});
@@ -207,7 +209,7 @@ async function run(browser,origin,canvas,round){
   writeFileSync(path.join(out,filename+'.json'),JSON.stringify(report,null,2)+'\n');
   process.stdout.write(report.status+' '+filename+' transitions='+report.transitions.length+
    ' misses='+report.totalMissed+' canonical='+report.totalCanonical+
-   ' cache='+report.totalCacheDifferences+' blurFallbacks='+report.wholeFallbackCalls+'\n');
+   ' cache='+report.totalCacheDifferences+' filterTargetTiles='+report.partialFilterTargetTiles+'\n');
   return report;
  }catch(e){
   writeFileSync(path.join(out,filename+'-error.json'),JSON.stringify({error:String(e),report,errors,external},null,2)+'\n');
@@ -229,7 +231,7 @@ async function run(browser,origin,canvas,round){
    runs:runs.map(r=>({canvas:r.canvas,round:r.round,status:r.status,failures:r.failures,
     error:r.error,transitions:r.transitions?.length,
     misses:r.totalMissed,canonical:r.totalCanonical,cache:r.totalCacheDifferences,
-    changed:r.totalChanged,tiles:r.tileCalls,blurFallbacks:r.wholeFallbackCalls,fullInvalidationRenders:r.fullInvalidationRenders,
+    changed:r.totalChanged,tiles:r.tileCalls,partialFilterTargetTiles:r.partialFilterTargetTiles,fullInvalidationRenders:r.fullInvalidationRenders,
      fullSourceTiles:r.fullSourceTiles,partialSourceTiles:r.partialSourceTiles,
      partialGaussianSourceTiles:r.partialGaussianSourceTiles,
      sourcePixelsRendered:r.sourcePixelsRendered,targetPixelsUpdated:r.targetPixelsUpdated,
