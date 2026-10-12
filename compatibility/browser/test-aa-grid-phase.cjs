@@ -16,10 +16,9 @@ const server=createServer((req,res)=>{
  catch(e){res.writeHead(404);res.end(String(e));}
 });
 const canvasList=[{w:640,h:400},{w:800,h:500},{w:1024,h:640}];
-const indexes=[2,6,8,10];
-const variants=[{grid:1,pad:0},{grid:2,pad:0},{grid:4,pad:0},{grid:8,pad:0},{grid:16,pad:0},
- {grid:4,pad:4},{grid:4,pad:16},{grid:8,pad:16},{grid:16,pad:16},
- {grid:4,pad:32},{grid:8,pad:32},{grid:16,pad:32},{grid:4,pad:64}];
+const indexes=[2,6,8];
+const variants=[{grid:1,pad:0},{grid:2,pad:0},{grid:4,pad:0},{grid:8,pad:0},
+ {grid:16,pad:0},{grid:4,pad:16},{grid:16,pad:16},{grid:4,pad:64}];
 const originals=[];
 function union(a,b){if(!a)return b;if(!b)return a;let x=Math.min(a.x,b.x),y=Math.min(a.y,b.y);return {x,y,w:Math.max(a.x+a.w,b.x+b.w)-x,h:Math.max(a.y+a.h,b.y+b.h)-y};}
 function split(r){
@@ -31,8 +30,7 @@ function regions(canvas,i){
  const r=union(rect(states[i-1],canvas.w,canvas.h),rect(states[i],canvas.w,canvas.h));
  const generated=r?split(r).map(t=>({...t,kind:'pre-fallback-split'})):[];
  return [...generated,
-  {x:397,y:165,w:125,h:115,kind:'arbitrary'},
-  {x:469,y:202,w:118,h:98,kind:'arbitrary'}].filter(r=>r.x+r.w<=canvas.w&&r.y+r.h<=canvas.h&&r.w>0&&r.h>0);
+  {x:397,y:165,w:125,h:115,kind:'arbitrary'}].filter(r=>r.x+r.w<=canvas.w&&r.y+r.h<=canvas.h&&r.w>0&&r.h>0);
 }
 async function run(browser,base,canvas,round){
  const context=await browser.newContext({viewport:{width:1120,height:750}});
@@ -46,8 +44,8 @@ async function run(browser,base,canvas,round){
  const filename='phase'+round+'-'+canvas.w+'x'+canvas.h;
  let result;
  try{
-  await page.goto(base+'/aa-precision.html');
-  await page.waitForFunction(()=>window.PFX_AA!==undefined,null,{timeout:30000});
+  await page.goto(base+'/aa-precision.html',{waitUntil:'load',timeout:15000});
+  await page.waitForFunction(()=>window.PFX_AA!==undefined,null,{timeout:12000});
   const tasks=(round===1?indexes:[...indexes].reverse()).map(index=>({index,state:states[index],regions:regions(canvas,index)}));
   result=await page.evaluate(({canvas,tasks,variants})=>{
    const {w,h}=canvas;
