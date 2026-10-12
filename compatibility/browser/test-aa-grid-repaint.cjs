@@ -119,7 +119,9 @@ async function run(browser,origin,canvas,round){
    const contains=(rects,x,y)=>rects.some(r=>x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h);
    const caches=Object.fromEntries(layouts.map(k=>[k,new Uint8Array(fulls[0])]));
    const transitions=[];let totalMissed=0,totalCanonical=0,totalLegacy=0,
-    totalCacheDifferences=0,totalChanged=0,tileCalls=0,wholeFallbackCalls=0,fullInvalidationRenders=0;
+    totalCacheDifferences=0,totalChanged=0,tileCalls=0,wholeFallbackCalls=0,fullInvalidationRenders=0,
+    fullSourceTiles=0,partialSourceTiles=0,partialGaussianSourceTiles=0,
+    sourcePixelsRendered=0,targetPixelsUpdated=0;
    for(let i=1;i<states.length;i++){
     const p=plans[i-1],s=states[i],prev=fulls[i-1],ref=fulls[i];
     let trueChanged=0,missed=0;
@@ -134,7 +136,17 @@ async function run(browser,origin,canvas,round){
     for(const layout of layouts){
      let legacy=0,canonical=0,rendered=0;
      for(const r of p.layouts[layout]){
-      const b=render(s,r,true,true),old=render(s,r,false,true);
+      // Measure actual expanded WASM source raster area independently.
+       const sx=Math.max(0,Math.floor((r.x-16)/4)*4);
+       const sy=Math.max(0,Math.floor((r.y-16)/4)*4);
+       const ex=Math.min(w,Math.ceil((r.x+r.w+16)/4)*4);
+       const ey=Math.min(h,Math.ceil((r.y+r.h+16)/4)*4);
+       const area=(ex-sx)*(ey-sy);
+       sourcePixelsRendered+=area;
+       targetPixelsUpdated+=r.w*r.h;
+       if(area===w*h)fullSourceTiles++;
+       else {partialSourceTiles++;if(s.mode>=2)partialGaussianSourceTiles++;}
+       const b=render(s,r,true,true),old=render(s,r,false,true);
       // The reference is the FULL canvas; compare() uses its full stride.
       // A cropped reference cannot be passed with the full-scene stride.
       const samples=[];
@@ -167,7 +179,8 @@ async function run(browser,origin,canvas,round){
    }
    return {canvas,round,totalMissed,totalCanonical,totalLegacy,
      totalCacheDifferences,totalChanged,tileCalls,wholeFallbackCalls,fullInvalidationRenders,
-     fullChanged,painted,transitions,probes};
+     fullSourceTiles,partialSourceTiles,partialGaussianSourceTiles,
+     sourcePixelsRendered,targetPixelsUpdated,fullChanged,painted,transitions,probes};
   },{canvas,states,plans:safePlans,layouts,round});
   if(round===1&&canvas.w===800){
    await page.evaluate(({state})=>{
@@ -186,7 +199,8 @@ async function run(browser,origin,canvas,round){
   if(report.totalCacheDifferences!==0)failures.push('Persistent repaint cache mismatch');
   if(report.totalChanged<50||report.painted<100)failures.push('Stress scene not exercised');
   if(report.probes.some(p=>p.safeDifferences.channels!==0))failures.push('Fallback masked/filter ROI is not exact');
-  if(report.wholeFallbackCalls<1)failures.push('No truly partial Gaussian source rasters');
+  if(report.partialGaussianSourceTiles<1)failures.push('No genuinely partial Gaussian WASM sources');
+  if(report.partialSourceTiles<1)failures.push('No genuinely partial source rasters');
   if(errors.length||external.length)failures.push('Unexpected network/browser errors');
   report.status=failures.length?'FAIL':'PASS';report.failures=failures;
   report.errors=errors;report.external=external;
@@ -216,6 +230,9 @@ async function run(browser,origin,canvas,round){
     error:r.error,transitions:r.transitions?.length,
     misses:r.totalMissed,canonical:r.totalCanonical,cache:r.totalCacheDifferences,
     changed:r.totalChanged,tiles:r.tileCalls,blurFallbacks:r.wholeFallbackCalls,fullInvalidationRenders:r.fullInvalidationRenders,
+     fullSourceTiles:r.fullSourceTiles,partialSourceTiles:r.partialSourceTiles,
+     partialGaussianSourceTiles:r.partialGaussianSourceTiles,
+     sourcePixelsRendered:r.sourcePixelsRendered,targetPixelsUpdated:r.targetPixelsUpdated,
     nativeProbes:r.probes})),
    limitations:[
     'Near-singular scales, anisotropic affine transforms, explicit miter joins (limit 12), global alpha mask and Vello CPU Gaussian blur.',
