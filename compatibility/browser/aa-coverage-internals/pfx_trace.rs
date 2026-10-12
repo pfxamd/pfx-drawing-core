@@ -7,6 +7,7 @@ use crate::flatten::Line;
 #[derive(Default)]
 struct Capture {
     enabled: bool,
+    canonical: bool,
     origin_x: u16,
     origin_y: u16,
     lines: Vec<f32>,
@@ -18,9 +19,10 @@ static STATE: OnceLock<Mutex<Capture>> = OnceLock::new();
 fn state() -> &'static Mutex<Capture> {
     STATE.get_or_init(|| Mutex::new(Capture::default()))
 }
-pub fn begin(origin_x: u16, origin_y: u16) {
+pub fn begin_mode(origin_x: u16, origin_y: u16, canonical: bool, collect: bool) {
     let mut s=state().lock().expect("trace lock");
-    s.enabled=true;
+    s.enabled=collect;
+    s.canonical=canonical;
     s.origin_x=origin_x;
     s.origin_y=origin_y;
     s.path_index=0;
@@ -28,8 +30,17 @@ pub fn begin(origin_x: u16, origin_y: u16) {
     s.lines.clear();
     s.pixels.clear();
 }
+pub fn begin(origin_x: u16, origin_y: u16) {
+    begin_mode(origin_x, origin_y, false, true);
+}
+pub fn geometry_mode() -> (bool, u16, u16) {
+    let s=state().lock().expect("trace lock");
+    (s.canonical, s.origin_x, s.origin_y)
+}
 pub fn end() {
-    state().lock().expect("trace lock").enabled=false;
+    let mut s=state().lock().expect("trace lock");
+    s.enabled=false;
+    s.canonical=false;
 }
 pub fn is_enabled()->bool {
     state().lock().expect("trace lock").enabled
