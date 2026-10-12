@@ -63,6 +63,11 @@ async function examine(browser,origin,canvas,round){
   result=await page.evaluate(({canvas,tasks,pads})=>{
    const api=window.PFX_AA;if(!api.ready||typeof api.boundaryEffect!=='function')throw Error('Pinned WASM absent '+api.error);
    const {w,h}=canvas;
+   function expanded(r,p){
+    const x=Math.max(0,r.x-p),y=Math.max(0,r.y-p);
+    const x1=Math.min(w,r.x+r.w+p),y1=Math.min(h,r.y+r.h+p);
+    return {x,y,w:x1-x,h:y1-y};
+   }
    function raw(s,r,canonical){
     const v=api.boundaryEffect(w,h,r.x,r.y,r.w,r.h,new Float64Array(s.m),
      s.mode,s.shift,s.width,canonical,false);
@@ -95,7 +100,7 @@ async function examine(browser,origin,canvas,round){
     for(const roi of task.regions){
      const entries=[];
      for(const pad of pads){
-      const source=expanded(roi,pad,w,h);
+      const source=expanded(roi,pad);
       const v=raw(task.state,source,true);
       const compare=equal(full,v,source,roi,pad===0||pad===16||pad===48);
       entries.push({pad,source,channels:compare.channels,pixels:compare.pixels,
