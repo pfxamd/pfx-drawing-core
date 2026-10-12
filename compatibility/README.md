@@ -128,3 +128,13 @@ Canonical global flattening: 0 changed channels; previous local-first control:
 14,600 differences across both passes. The source-built pinned proof handles
 stroked paths and canvas dimensions dynamically, with unchanged full-frame
 reference. CPU-only browser evidence; not a production renderer or main merge.
+
+## Strict full dirty-region edge cases
+
+[Verified 144/144 Vello CPU edge cases](results/browser-aa-edge-boundaries.md):
+[run 38257662189](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38257662189).
+Nested freeform clips, offscreen geometry spanning canvas boundaries, and strong
+fractional affine transforms on three canvas sizes remained byte-exact across
+**every pixel in each independent dirty rectangle**. Previous local-first control:
+10,846 changed RGBA channels over both contexts; global flatten: zero.
+CPU-side proof only; no GPU inference, no production adoption, no main merge.
