@@ -161,3 +161,14 @@ Damage now comes from **old/new drawing operations**, not pixel-reference
 differences. Covered move, delete/reinsert, reorder, opacity, blend, clip and
 no-op transitions. Known geometry bounds only; this is experimental Vello CPU
 and does not establish a general renderer, GPU speedup or safe main merge.
+
+## Arbitrary Bézier hulls and group-dependent operation damage
+
+[Verified scene graph experiment](results/browser-aa-path-group-damage.md):
+[source-built CPU WASM + 6/6 passing browser context tests](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38270743650).
+Three canvas sizes and 14 scene states: nested groups with opacity, blend and
+rectangular clip changes; full-group move/delete/reorder; cubic-point and stroke
+changes. Damage is selected from path-control hulls and inherited group state,
+**never the reference pixels**. Across 78 transitions and 360 actual tile
+renders, 361,272 changed pixels were all covered; canonical tile + accumulated
+cache RGBA matches full frames exactly. CPU software proof only; no main merge.
