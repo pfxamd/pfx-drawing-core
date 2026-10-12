@@ -196,3 +196,28 @@ pub fn render_complex_tile_a(frame: u32) -> Vec<u8> {
 pub fn render_complex_tile_b(frame: u32) -> Vec<u8> {
     render(frame, B_X, B_Y, B_W, B_H)
 }
+
+// Source-patched Vello intermediate diagnostics. The capture gate is active
+// only for this explicit proof; all existing rendering exports remain unchanged.
+#[wasm_bindgen]
+pub fn render_complex_intermediate(
+    frame: u32, ox: u16, oy: u16, width: u16, height: u16, scene: u8
+) -> Vec<u8> {
+    vello_common::pfx_trace::begin(ox, oy);
+    let pixels=render_variant_trace(frame,ox,oy,width,height,
+        1.0,0.0,0.0,0.0,true,scene,false);
+    vello_common::pfx_trace::end();
+    pixels
+}
+#[wasm_bindgen]
+pub fn intermediate_lines() -> Vec<f32> {
+    vello_common::pfx_trace::lines()
+}
+#[wasm_bindgen]
+pub fn intermediate_coverages() -> Vec<f32> {
+    vello_common::pfx_trace::pixels()
+}
+#[wasm_bindgen]
+pub fn intermediate_truncated() -> bool {
+    vello_common::pfx_trace::truncated()
+}
