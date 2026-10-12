@@ -55,10 +55,20 @@ function browserTreeRssKB(pid){
       caveat:'RSS is summed across Chromium processes; shared pages are counted multiple times. This is NOT distinct physical RAM or GPU/VRAM allocation.'};
   }catch{return null;}
 }
+function locateBrowserPid(){
+  // Playwright does not expose Browser.process(); identify this isolated CI browser
+  // from the executable command line instead. Missing/ambiguous PID => null RSS.
+  try{
+    const rows=execFileSync('ps',['-eo','pid=,ppid=,args='],{encoding:'utf8'}).split('\n');
+    const candidates=rows.filter(x=>x.includes('--remote-debugging-pipe')&&/chrome-headless-shell|chromium|chrome/.test(x));
+    if(candidates.length!==1)return null;
+    return Number(candidates[0].trim().split(/\s+/)[0])||null;
+  }catch{return null;}
+}
 async function scenario(browser,origin,mode,iteration){
   const label=iteration+'-'+mode,context=await browser.newContext({viewport:{width:800,height:500},deviceScaleFactor:1});
   const page=await context.newPage(),errors=[],external=[],requested=[];
-  const pid=browser.process()?.pid;
+  const pid=locateBrowserPid();
   page.on('pageerror',e=>errors.push(String(e)));
   page.on('console',e=>{if(e.type()==='error')errors.push(e.text());});
   page.on('response',r=>{if(r.status()>=400)errors.push('HTTP '+r.status()+' '+r.url());});
