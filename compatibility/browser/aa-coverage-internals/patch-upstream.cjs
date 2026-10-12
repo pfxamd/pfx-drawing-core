@@ -21,6 +21,43 @@ edit('vello_common/src/lib.rs',
 edit('vello_common/src/strip_generator.rs',
   '        self.generate_with_clip(aliasing_threshold, strip_storage, fill_rule, clip_path);\n',
   '        crate::pfx_trace::record_lines(&self.line_buf);\n        self.generate_with_clip(aliasing_threshold, strip_storage, fill_rule, clip_path);\n');
+// Alternative diagnostic branch: flatten in the same global coordinate frame
+// as the 800x500 reference BEFORE f64 -> f32 conversion, then shift the already
+// flattened f32 segments to the local raster space. Keep tile/strip stages
+// unchanged; this isolates the influence of pre-quantization geometry origins.
+edit('vello_common/src/strip_generator.rs',
+  `        flatten::fill(
+            self.level,
+            path,
+            transform,
+            &mut self.line_buf,
+            &mut self.flatten_ctx,
+            cull_bbox,
+        );`,
+  `        let (canonical, origin_x, origin_y) = crate::pfx_trace::geometry_mode();
+        if canonical && (origin_x != 0 || origin_y != 0) {
+            // Render the globally identical tessellation as the full canvas.
+            // Keep this experimental canonical bbox fixed to the proof scene.
+            let absolute_transform = Affine::translate((
+                f64::from(origin_x), f64::from(origin_y),
+            )) * transform;
+            flatten::fill(
+                self.level, path, absolute_transform, &mut self.line_buf,
+                &mut self.flatten_ctx, RectU16::new(0, 0, 800, 500),
+            );
+            // The downstream tile/strip rasterizer still works locally.
+            let ox=f32::from(origin_x);
+            let oy=f32::from(origin_y);
+            for line in &mut self.line_buf {
+                line.p0.x -= ox; line.p0.y -= oy;
+                line.p1.x -= ox; line.p1.y -= oy;
+            }
+        } else {
+            flatten::fill(
+                self.level, path, transform, &mut self.line_buf,
+                &mut self.flatten_ctx, cull_bbox,
+            );
+        }`);
 edit('vello_common/src/strip.rs',
   '            alpha_buf.extend_from_slice(u8_vals.as_slice());\n',
   `            // PFx diagnostic only: capture actual pre-u8 antialias coverage.
