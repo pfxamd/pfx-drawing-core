@@ -37,38 +37,30 @@ async function jsMemory(client){
   const m=Object.fromEntries((await client.send('Performance.getMetrics')).metrics.map(x=>[x.name,x.value]));
   return {usedBytes:m.JSHeapUsedSize??null,totalBytes:m.JSHeapTotalSize??null,domNodes:m.Nodes??null};
 }
-function browserTreeRssKB(pid){
-  if(!pid)return null;
+async function chromiumProcessRss(browser){
+  // Chromium's own process IDs from browser-level CDP, not guessed from names.
+  let session;
   try{
-    const all=execFileSync('ps',['-eo','pid=,ppid=,rss='],{encoding:'utf8'}).trim().split('\n')
-      .map(s=>s.trim().split(/\s+/).map(Number)).filter(a=>a.length===3&&a.every(Number.isFinite));
-    const descendants=new Set([pid]);
-    let changed=true;
-    while(changed){
-      changed=false;
-      for(const [child,parent] of all)if(descendants.has(parent)&&!descendants.has(child)){
-        descendants.add(child);changed=true;
-      }
-    }
-    const active=all.filter(([id])=>descendants.has(id));
-    return {pid,processes:active.length,rssSumKB:active.reduce((sum,row)=>sum+row[2],0),
-      caveat:'RSS is summed across Chromium processes; shared pages are counted multiple times. This is NOT distinct physical RAM or GPU/VRAM allocation.'};
-  }catch{return null;}
-}
-function locateBrowserPid(){
-  // Playwright does not expose Browser.process(); identify this isolated CI browser
-  // from the executable command line instead. Missing/ambiguous PID => null RSS.
-  try{
-    const rows=execFileSync('ps',['-eo','pid=,ppid=,args='],{encoding:'utf8'}).split('\n');
-    const candidates=rows.filter(x=>x.includes('--remote-debugging-pipe')&&/chrome-headless-shell|chromium|chrome/.test(x));
-    if(candidates.length!==1)return null;
-    return Number(candidates[0].trim().split(/\s+/)[0])||null;
-  }catch{return null;}
+    session=await browser.newBrowserCDPSession();
+    const info=(await session.send('SystemInfo.getProcessInfo')).processInfo;
+    const rssByPid=new Map(execFileSync('ps',['-eo','pid=,rss='],{encoding:'utf8'})
+      .trim().split('\n').map(line=>line.trim().split(/\s+/).map(Number))
+      .filter(pair=>pair.length===2&&pair.every(Number.isFinite)));
+    const processes=info.map(p=>({type:p.type,pid:p.id,rssKB:rssByPid.get(p.id)??null}));
+    const measured=processes.filter(p=>p.rssKB!==null);
+    return {method:'SystemInfo.getProcessInfo plus Linux ps',
+      chromiumProcessCount:info.length,rssMeasuredProcessCount:measured.length,
+      rssSumKB:measured.length?measured.reduce((sum,p)=>sum+p.rssKB,0):null,
+      processes,caveat:'RSS summed over subprocesses double-counts shared pages; no GPU/VRAM breakdown.'};
+  }catch(error){
+    return {rssSumKB:null,method:'SystemInfo.getProcessInfo',error:String(error)};
+  }finally{
+    if(session)try{await session.detach();}catch{}
+  }
 }
 async function scenario(browser,origin,mode,iteration){
   const label=iteration+'-'+mode,context=await browser.newContext({viewport:{width:800,height:500},deviceScaleFactor:1});
   const page=await context.newPage(),errors=[],external=[],requested=[];
-  const pid=locateBrowserPid();
   page.on('pageerror',e=>errors.push(String(e)));
   page.on('console',e=>{if(e.type()==='error')errors.push(e.text());});
   page.on('response',r=>{if(r.status()>=400)errors.push('HTTP '+r.status()+' '+r.url());});
@@ -87,10 +79,10 @@ async function scenario(browser,origin,mode,iteration){
     await page.goto(origin+'/compare.html?'+query,{waitUntil:'load',timeout:30000});
     await page.waitForFunction(()=>window.PFX_COMPOSITION?.frames>=40||window.PFX_COMPOSITION?.errors?.length>0||window.PFX_BOOT_ERROR,null,{timeout:90000});
     const first=PNG.sync.read(await page.screenshot({animations:'disabled'}));
-    const warmHeap=await jsMemory(cdp),warmRss=browserTreeRssKB(pid);
+    const warmHeap=await jsMemory(cdp),warmRss=await chromiumProcessRss(browser);
     await page.waitForFunction(()=>window.PFX_COMPOSITION?.frames>=240||window.PFX_COMPOSITION?.errors?.length>0||window.PFX_BOOT_ERROR,null,{timeout:90000});
     const state=await page.evaluate(()=>window.PFX_COMPOSITION);
-    const endHeap=await jsMemory(cdp),endRss=browserTreeRssKB(pid);
+    const endHeap=await jsMemory(cdp),endRss=await chromiumProcessRss(browser);
     const last=PNG.sync.read(await page.screenshot({path:path.join(out,label+'.png'),animations:'disabled'}));
     result={
       label,mode,iteration,status:'PASS',frames:state.frames,wallTo240FramesMs:Date.now()-since,
@@ -112,6 +104,7 @@ async function scenario(browser,origin,mode,iteration){
     if(state.frames!==240||state.targetFrames!==240)fail.push('Incomplete frames');
     if(last.width!==800||last.height!==500)fail.push('Screenshot shape');
     if(!result.rafCallbackIntervalMs)fail.push('No RAF timing');
+    if(endRss.rssSumKB===null||warmRss.rssSumKB===null)fail.push('Chromium RSS unavailable: '+JSON.stringify(endRss));
     if(mode==='2d'){
       if(!state.vello||state.filament||state.pixelChecks?.transparent!==0)fail.push('2D engine isolation failed');
       if(requested.some(p=>/filament|filamat/.test(p)))fail.push('3D runtime loaded in 2D-only run');
