@@ -2,7 +2,7 @@
 // Conservative manually specified dirty rectangles; no GPU-sharing claims.
 use wasm_bindgen::prelude::*;
 use vello_cpu::{RenderContext, Resources, Pixmap};
-use vello_cpu::{color::palette::css, kurbo::{BezPath, Rect}};
+use vello_cpu::{color::palette::css, kurbo::{Affine, BezPath, Rect}};
 
 const FULL_W: u16 = 800;
 const FULL_H: u16 = 500;
@@ -19,13 +19,13 @@ const UNION_Y: u16 = A_Y;
 const UNION_W: u16 = 328;
 const UNION_H: u16 = 240;
 
-fn rect(ctx: &mut RenderContext, x: f64, y: f64, w: f64, h: f64, ox: f64, oy: f64) {
-    ctx.fill_rect(&Rect::new(x - ox, y - oy, x + w - ox, y + h - oy));
+fn rect(ctx: &mut RenderContext, x: f64, y: f64, w: f64, h: f64, _ox: f64, _oy: f64) {
+    ctx.fill_rect(&Rect::new(x, y, x + w, y + h));
 }
 
-fn blob_a(ctx: &mut RenderContext, t: f64, ox: f64, oy: f64) {
-    let x = 480.45 + 12.0 * (t * 0.061).sin() - ox;
-    let y = 145.15 + 7.0 * (t * 0.037).cos() - oy;
+fn blob_a(ctx: &mut RenderContext, t: f64, _ox: f64, _oy: f64) {
+    let x = 480.45 + 12.0 * (t * 0.061).sin();
+    let y = 145.15 + 7.0 * (t * 0.037).cos();
     let mut p = BezPath::new();
     p.move_to((x, y + 55.0));
     p.curve_to((x - 10.15, y + 5.25), (x + 78.75, y - 28.65), (x + 112.35, y + 15.55));
@@ -44,9 +44,9 @@ fn blob_a(ctx: &mut RenderContext, t: f64, ox: f64, oy: f64) {
     ctx.fill_path(&inset);
 }
 
-fn blob_b(ctx: &mut RenderContext, t: f64, ox: f64, oy: f64) {
-    let x = 608.65 + 14.0 * (t * 0.073).cos() - ox;
-    let y = 202.35 + 9.0 * (t * 0.047).sin() - oy;
+fn blob_b(ctx: &mut RenderContext, t: f64, _ox: f64, _oy: f64) {
+    let x = 608.65 + 14.0 * (t * 0.073).cos();
+    let y = 202.35 + 9.0 * (t * 0.047).sin();
     let mut p = BezPath::new();
     p.move_to((x - 16.75, y + 53.25));
     p.curve_to((x - 24.15, y - 4.65), (x + 80.65, y - 32.25), (x + 109.5, y + 25.75));
@@ -69,6 +69,10 @@ fn render(step: u32, ox: u16, oy: u16, width: u16, height: u16) -> Vec<u8> {
     let mut ctx = RenderContext::new(width, height);
     let mut res = Resources::new();
     let (ox, oy) = (f64::from(ox), f64::from(oy));
+    // Preserve globally identical cubic/quad path coordinates. The renderer
+    // applies a translation to each tile, instead of JS/Rust rebuilding
+    // differently-rounded local path control points.
+    ctx.set_transform(Affine::translate((-ox, -oy)));
     // Rebuild the complete ordered scene even for overlapping tiles.
     ctx.set_paint(css::WHITE);
     rect(&mut ctx, 24.0, 24.0, 231.0, 7.0, ox, oy);
