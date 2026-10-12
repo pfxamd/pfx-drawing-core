@@ -547,3 +547,141 @@ pub fn render_complex_operations(
     vello_common::pfx_trace::end();
     bytes
 }
+
+// Experimental typed scene graph with arbitrary Bézier move/line/quad/cubic
+// command coordinates. Node transforms, nested opacity, mix and group clipping
+// come from the SAME command stream for full- and tile-frame renders.
+#[wasm_bindgen]
+pub fn render_complex_graph(
+    full_w:u16, full_h:u16, ox:u16, oy:u16, w:u16, h:u16,
+    commands:Vec<f64>, canonical:bool
+) -> Vec<u8> {
+    if full_w==0 || full_h==0 || w==0 || h==0
+        || u32::from(ox)+u32::from(w)>u32::from(full_w)
+        || u32::from(oy)+u32::from(h)>u32::from(full_h)
+        || commands.len()>14000 || commands.iter().any(|v| !v.is_finite() || v.abs()>1e6)
+    {return Vec::new();}
+    use vello_cpu::peniko::{BlendMode, Mix, Compose};
+    vello_common::pfx_trace::begin_extended(ox,oy,full_w,full_h,canonical,false);
+    let mut ctx=RenderContext::new(w,h);
+    let mut res=Resources::new();
+    let local=Affine::translate((-f64::from(ox),-f64::from(oy)));
+    ctx.set_transform(local);
+    // Entirely deterministic static canvas background and underneath stroke.
+    ctx.set_paint(css::WHITE);
+    ctx.fill_rect(&Rect::new(22.0,23.0,f64::from(full_w)-24.0,f64::from(full_h)-20.0));
+    ctx.set_paint(css::MAGENTA);
+    ctx.fill_rect(&Rect::new(302.0,213.0,603.0,230.0));
+
+    // Stack stores (absolute group translation, has_clip), no byte raster data.
+    let mut groups:Vec<(f64,f64,bool)>=Vec::new();
+    let mut i=0_usize;
+    let mut processed=0_usize;
+    let mut ok=true;
+    while i<commands.len(){
+        processed+=1;
+        if processed>512 {ok=false;break;}
+        let kind=commands[i];
+        if kind==1.0 { // open group: [1,id,dx,dy,alpha,blend,clip,x0,y0,x1,y1]
+            if i+11>commands.len() || groups.len()>=8 {ok=false;break;}
+            let dx=commands[i+2];
+            let dy=commands[i+3];
+            let opacity=commands[i+4];
+            let blend=commands[i+5];
+            let flag=commands[i+6];
+            if !(0.0..=1.0).contains(&opacity)
+                || !(0.0..=3.0).contains(&blend) || blend.fract()!=0.0
+                || !(flag==0.0 || flag==1.0) {ok=false;break;}
+            let (px,py)=groups.last().map(|g|(g.0,g.1)).unwrap_or((0.0,0.0));
+            let tx=px+dx;
+            let ty=py+dy;
+            ctx.set_transform(local*Affine::translate((tx,ty)));
+            let mix=match blend as u8 {
+                1=>Mix::Multiply,2=>Mix::Screen,3=>Mix::Overlay,_=>Mix::Normal
+            };
+            ctx.push_blend_layer(BlendMode{mix,compose:Compose::SrcOver});
+            ctx.push_opacity_layer(opacity as f32);
+            if flag==1.0 {
+                if !(commands[i+7]<commands[i+9] && commands[i+8]<commands[i+10]){
+                    ok=false;break;
+                }
+                ctx.push_clip_rect(&Rect::new(
+                    commands[i+7],commands[i+8],commands[i+9],commands[i+10]
+                ));
+            }
+            groups.push((tx,ty,flag==1.0));
+            i+=11;
+        } else if kind==2.0 { // close group
+            let Some((_,_,clipped))=groups.pop() else {ok=false;break;};
+            if clipped {ctx.pop_clip();}
+            ctx.pop_layer(); // opacity group
+            ctx.pop_layer(); // blend isolation group
+            let (tx,ty)=groups.last().map(|g|(g.0,g.1)).unwrap_or((0.0,0.0));
+            ctx.set_transform(local*Affine::translate((tx,ty)));
+            i+=1;
+        } else if kind==3.0 { // arbitrary Bézier path
+            if i+8>commands.len(){ok=false;break;}
+            let dx=commands[i+2];
+            let dy=commands[i+3];
+            let opacity=commands[i+4];
+            let color=commands[i+5];
+            let stroke=commands[i+6];
+            let segments=commands[i+7];
+            if !(0.0..=1.0).contains(&opacity)
+                || !(0.0..=2.0).contains(&color)||color.fract()!=0.0
+                || !(0.0..=120.0).contains(&stroke)
+                || !(1.0..=100.0).contains(&segments)||segments.fract()!=0.0
+            {ok=false;break;}
+            i+=8;
+            let mut p=BezPath::new();
+            let mut have_move=false;
+            for _ in 0..segments as usize {
+                if i>=commands.len(){ok=false;break;}
+                let verb=commands[i];i+=1;
+                let n=match verb {
+                    10.0=>2,11.0=>2,12.0=>4,13.0=>6,14.0=>0,_=>{ok=false;break;}
+                };
+                if i+n>commands.len(){ok=false;break;}
+                if !have_move && verb!=10.0 {ok=false;break;}
+                if verb==10.0 {
+                    p.move_to((commands[i],commands[i+1]));have_move=true;
+                } else if verb==11.0 {
+                    p.line_to((commands[i],commands[i+1]));
+                } else if verb==12.0 {
+                    p.quad_to((commands[i],commands[i+1]),(commands[i+2],commands[i+3]));
+                } else if verb==13.0 {
+                    p.curve_to((commands[i],commands[i+1]),(commands[i+2],commands[i+3]),
+                        (commands[i+4],commands[i+5]));
+                } else {
+                    p.close_path();
+                }
+                i+=n;
+            }
+            if !ok{break;}
+            let (px,py)=groups.last().map(|g|(g.0,g.1)).unwrap_or((0.0,0.0));
+            ctx.set_transform(local*Affine::translate((px+dx,py+dy)));
+            ctx.push_opacity_layer(opacity as f32);
+            ctx.set_paint(match color as u8 {
+                1=>css::WHITE,2=>css::BLUE,_=>css::MAGENTA
+            });
+            if stroke>0.0{
+                ctx.set_stroke(Stroke::new(stroke));
+                ctx.stroke_path(&p);
+            }else{
+                ctx.fill_path(&p);
+            }
+            ctx.pop_layer();
+        } else {ok=false;break;}
+    }
+    if !ok || !groups.is_empty(){
+        vello_common::pfx_trace::end();
+        return Vec::new();
+    }
+    ctx.flush();
+    let mut pixmap=Pixmap::new(w,h);
+    ctx.render(&mut pixmap,&mut res);
+    let mut bytes=Vec::with_capacity(usize::from(w)*usize::from(h)*4);
+    for px in pixmap.data(){bytes.extend_from_slice(&[px.r,px.g,px.b,px.a]);}
+    vello_common::pfx_trace::end();
+    bytes
+}
