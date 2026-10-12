@@ -10,6 +10,8 @@ struct Capture {
     canonical: bool,
     origin_x: u16,
     origin_y: u16,
+    global_width: u16,
+    global_height: u16,
     lines: Vec<f32>,
     pixels: Vec<f32>,
     path_index: usize,
@@ -19,8 +21,10 @@ static STATE: OnceLock<Mutex<Capture>> = OnceLock::new();
 fn state() -> &'static Mutex<Capture> {
     STATE.get_or_init(|| Mutex::new(Capture::default()))
 }
-pub fn begin_mode(origin_x: u16, origin_y: u16, canonical: bool, collect: bool) {
+pub fn begin_extended(origin_x: u16, origin_y: u16, global_width:u16, global_height:u16, canonical: bool, collect: bool) {
     let mut s=state().lock().expect("trace lock");
+    s.global_width=global_width;
+    s.global_height=global_height;
     s.enabled=collect;
     s.canonical=canonical;
     s.origin_x=origin_x;
@@ -30,12 +34,15 @@ pub fn begin_mode(origin_x: u16, origin_y: u16, canonical: bool, collect: bool) 
     s.lines.clear();
     s.pixels.clear();
 }
+pub fn begin_mode(origin_x: u16, origin_y: u16, canonical:bool, collect:bool) {
+    begin_extended(origin_x, origin_y, 800, 500, canonical, collect);
+}
 pub fn begin(origin_x: u16, origin_y: u16) {
     begin_mode(origin_x, origin_y, false, true);
 }
-pub fn geometry_mode() -> (bool, u16, u16) {
+pub fn geometry_mode() -> (bool, u16, u16, u16, u16) {
     let s=state().lock().expect("trace lock");
-    (s.canonical, s.origin_x, s.origin_y)
+    (s.canonical, s.origin_x, s.origin_y, s.global_width, s.global_height)
 }
 pub fn end() {
     let mut s=state().lock().expect("trace lock");
