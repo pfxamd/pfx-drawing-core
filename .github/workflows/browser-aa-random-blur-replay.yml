@@ -1,0 +1,63 @@
+name: Vello CPU randomized blur explicit safe fallback replay
+on:
+  push:
+    branches:
+      - experiment/browser-aa-random-blur-bench
+    paths:
+      - '.github/workflows/browser-aa-random-blur-replay.yml'
+      - 'compatibility/browser/test-aa-random-blur-bench.cjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  browser-random-safe-fallback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: pfx-vello-random-radius-source-built
+          run-id: 38286104070
+          github-token: ${{ github.token }}
+          path: artifacts/vello
+      - name: Fail closed if compiled renderer inputs changed
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test "$(git hash-object compatibility/browser/vello-complex/src/lib.rs)" = ec0e2a412af24b43b1a60e375c0d1b4298231134
+          test "$(git hash-object compatibility/browser/vello-complex/Cargo.toml)" = 5c219a8bbcfcb8b129c24cbdcb6b7eb48f25315e
+          test "$(git hash-object compatibility/browser/aa-coverage-internals/pfx_trace.rs)" = 6242e86868b211b68fb5b3712fc6bdc4973eee0c
+          test "$(git hash-object compatibility/browser/aa-coverage-internals/patch-upstream.cjs)" = 399cfad80c72f1c945df8e9c8472a0d350c89818
+          test "$(git hash-object compatibility/browser/web/aa-precision.html)" = 3932fa4f0067583fc518a43ff66a923b619b0b98
+          grep -q render_complex_boundary_radius artifacts/vello/web/pfx_vello_complex.js
+      - name: Assemble exact isolated browser proof
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p artifacts/browser/web artifacts/browser/proof
+          cp compatibility/browser/web/aa-precision.html artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_complex.js artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_complex_bg.wasm artifacts/browser/web/
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+          node --check compatibility/browser/test-aa-random-blur-bench.cjs
+      - name: Reconfirm negative tile evidence and zero-delta full fallback
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/browser/web" \
+          PFX_PROOF_DIR="$GITHUB_WORKSPACE/artifacts/browser/proof" \
+          node compatibility/browser/test-aa-random-blur-bench.cjs
+          test -s artifacts/browser/proof/random-blur-bench-summary.json
+      - name: Preserve reproducible positive and negative evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-vello-random-fallback-browser-proof
+          path: artifacts/browser/proof
+          if-no-files-found: ignore
