@@ -59,11 +59,19 @@ function estimate(a,b,w,h){
  validate(a);validate(b);
  if(!Number.isInteger(w)||!Number.isInteger(h)||w<=0||h<=0)throw Error('Invalid canvas');
  if(JSON.stringify(a)===JSON.stringify(b))return {rects:[],reason:'unchanged',area:0,fullFallback:false};
- if(a.mode>=2||b.mode>=2){
-  // Vello filter source expansion and layer bounds need further verification.
-  // Correctness policy is a transparent full-frame fallback, not a false
-  // incremental performance win.
-  return {rects:[{x:0,y:0,w,h}],reason:'blur-filter-full-frame-fallback',area:w*h,fullFallback:true};
+ const fragile=s=>{
+  const [a0,b0,c0,d0]=s.m;
+  return Math.abs(a0*d0-b0*c0)<0.02;
+ };
+ if(a.mode!==0||b.mode!==0||fragile(a)||fragile(b)){
+  // Falsification in real Chromium found 1/255 divergences in subdivided
+  // near-singular and isolated alpha-mask raster targets. Blur requires its
+  // off-tile halo, too. Full invalidation prevents unproven dirty-tile paths
+  // from leaking stale or numerically divergent pixels.
+  const reason=a.mode>=2||b.mode>=2?'blur-filter-full-frame-fallback':
+   a.mode===1||b.mode===1?'alpha-mask-full-frame-fallback':
+   'near-singular-miter-full-frame-fallback';
+  return {rects:[{x:0,y:0,w,h}],reason,area:w*h,fullFallback:true};
  }
  const area=union(rect(a,w,h),rect(b,w,h));
  return {rects:area?[area]:[],reason:a.mode===1||b.mode===1?'alpha-mask':'miter-affine-stroke',
