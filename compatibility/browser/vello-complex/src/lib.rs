@@ -1,7 +1,7 @@
 // MIT OR Apache-2.0 — PFx proof only, built against pinned source Vello CPU.
 // Conservative manually specified dirty rectangles; no GPU-sharing claims.
 use wasm_bindgen::prelude::*;
-use vello_cpu::{RenderContext, Resources, Pixmap};
+use vello_cpu::{RenderContext, Resources, Pixmap, RasterizerSettings, RenderMode};
 use vello_cpu::{color::palette::css, kurbo::{Affine, BezPath, Rect}};
 
 const FULL_W: u16 = 800;
@@ -23,7 +23,7 @@ fn rect(ctx: &mut RenderContext, x: f64, y: f64, w: f64, h: f64, _ox: f64, _oy: 
     ctx.fill_rect(&Rect::new(x, y, x + w, y + h));
 }
 
-fn blob_a(ctx: &mut RenderContext, t: f64, _ox: f64, _oy: f64) {
+fn blob_a(ctx: &mut RenderContext, t: f64, _ox: f64, _oy: f64, draw_inset: bool) {
     let x = 480.45 + 12.0 * (t * 0.061).sin();
     let y = 145.15 + 7.0 * (t * 0.037).cos();
     let mut p = BezPath::new();
@@ -34,6 +34,7 @@ fn blob_a(ctx: &mut RenderContext, t: f64, _ox: f64, _oy: f64) {
     p.close_path();
     ctx.set_paint(css::MAGENTA);
     ctx.fill_path(&p);
+    if !draw_inset { return; }
     // A separate, overlapping inset with its own fractional antialiased boundary.
     let mut inset = BezPath::new();
     inset.move_to((x + 39.5, y + 53.5));
@@ -44,7 +45,7 @@ fn blob_a(ctx: &mut RenderContext, t: f64, _ox: f64, _oy: f64) {
     ctx.fill_path(&inset);
 }
 
-fn blob_b(ctx: &mut RenderContext, t: f64, _ox: f64, _oy: f64) {
+fn blob_b(ctx: &mut RenderContext, t: f64, _ox: f64, _oy: f64, draw_inset: bool) {
     let x = 608.65 + 14.0 * (t * 0.073).cos();
     let y = 202.35 + 9.0 * (t * 0.047).sin();
     let mut p = BezPath::new();
@@ -56,6 +57,7 @@ fn blob_b(ctx: &mut RenderContext, t: f64, _ox: f64, _oy: f64) {
     ctx.set_paint(css::WHITE);
     ctx.fill_path(&p);
 
+    if !draw_inset { return; }
     let mut overlap = BezPath::new();
     overlap.move_to((x + 11.4, y + 47.15));
     overlap.curve_to((x + 37.5, y + 10.75), (x + 96.5, y + 29.85), (x + 93.25, y + 78.4));
@@ -67,9 +69,10 @@ fn blob_b(ctx: &mut RenderContext, t: f64, _ox: f64, _oy: f64) {
 
 // An instrumented entrypoint with arbitrary raster origins and a global scene transform.
  // Keep the production experiment's original entrypoints bit-for-bit comparable.
-fn render_variant(
+fn render_variant_trace(
     step: u32, ox: u16, oy: u16, width: u16, height: u16,
     zoom: f64, rotation: f64, dx: f64, dy: f64, premultiplied: bool,
+    scene: u8, quality: bool,
 ) -> Vec<u8> {
     if width == 0 || height == 0 ||
        u32::from(ox) + u32::from(width) > u32::from(FULL_W) ||
@@ -93,7 +96,10 @@ fn render_variant(
             * Affine::translate((-620.0, -220.0));
     }
     ctx.set_transform(scene_transform);
-    // Rebuild the complete ordered scene even for overlapping tiles.
+    // Scene flags: 1=static bars; 2=blob A including inset; 4=blob B including inset;
+    // 8=blob A outline only; 16=blob B outline only.
+    // Scene 7 exactly preserves the original proof workload.
+    if scene & 1 != 0 {
     ctx.set_paint(css::WHITE);
     rect(&mut ctx, 24.0, 24.0, 231.0, 7.0, ox, oy);
     rect(&mut ctx, 24.0, 24.0, 7.0, 108.0, ox, oy);
@@ -102,14 +108,24 @@ fn render_variant(
     rect(&mut ctx, 24.0, 44.0, 156.0, 11.0, ox, oy);
     rect(&mut ctx, 24.0, 452.0, 162.0, 8.0, ox, oy);
     rect(&mut ctx, 300.0, 212.0, 190.0, 12.0, ox, oy);
+    }
     // Fractional Bezier contours, independent motion, blended overlaps and AA.
     let t = f64::from(step);
-    blob_a(&mut ctx, t, ox, oy);
-    blob_b(&mut ctx, t, ox, oy);
+    if scene & 2 != 0 { blob_a(&mut ctx, t, ox, oy, true); }
+    if scene & 4 != 0 { blob_b(&mut ctx, t, ox, oy, true); }
+    if scene & 8 != 0 { blob_a(&mut ctx, t, ox, oy, false); }
+    if scene & 16 != 0 { blob_b(&mut ctx, t, ox, oy, false); }
 
     let mut target = Pixmap::new(width, height);
     ctx.flush();
-    ctx.render(&mut target, &mut res);
+    if quality {
+        ctx.render_with(&mut target, &mut res, RasterizerSettings {
+            render_mode: RenderMode::OptimizeQuality,
+            ..RasterizerSettings::default()
+        });
+    } else {
+        ctx.render(&mut target, &mut res);
+    }
     let mut result = Vec::with_capacity(usize::from(width) * usize::from(height) * 4);
     for px in target.data() {
         let (r, g, b) = if premultiplied {
@@ -126,6 +142,14 @@ fn render_variant(
     result
 }
 
+fn render_variant(
+    step: u32, ox: u16, oy: u16, width: u16, height: u16,
+    zoom: f64, rotation: f64, dx: f64, dy: f64, premultiplied: bool,
+) -> Vec<u8> {
+    render_variant_trace(step, ox, oy, width, height, zoom, rotation, dx, dy,
+        premultiplied, 7, false)
+}
+
 fn render(step: u32, ox: u16, oy: u16, width: u16, height: u16) -> Vec<u8> {
     render_variant(step, ox, oy, width, height, 1.0, 0.0, 0.0, 0.0, false)
 }
@@ -139,6 +163,18 @@ pub fn render_complex_probe(
     zoom: f64, rotation: f64, dx: f64, dy: f64, premultiplied: bool
 ) -> Vec<u8> {
     render_variant(frame, ox, oy, width, height, zoom, rotation, dx, dy, premultiplied)
+}
+
+// Isolates AA coverage vs paint composition, without changing legacy exports.
+// The high-quality pipeline uses f32 for color composition, not f64 path geometry.
+#[wasm_bindgen]
+pub fn render_complex_origin_trace(
+    frame: u32, ox: u16, oy: u16, width: u16, height: u16,
+    zoom: f64, rotation: f64, dx: f64, dy: f64,
+    premultiplied: bool, scene: u8, quality: bool
+) -> Vec<u8> {
+    render_variant_trace(frame, ox, oy, width, height,
+        zoom, rotation, dx, dy, premultiplied, scene, quality)
 }
 
 #[wasm_bindgen]
