@@ -16,9 +16,9 @@ const server=createServer((req,res)=>{
  catch(e){res.writeHead(404);res.end(String(e));}
 });
 const canvasList=[{w:640,h:400},{w:800,h:500},{w:1024,h:640}];
-const indexes=[2,6,8];
+const indexes=[2,6,8,9,10,11];
 const variants=[{grid:1,pad:0},{grid:2,pad:0},{grid:4,pad:0},{grid:8,pad:0},
- {grid:16,pad:0},{grid:4,pad:16},{grid:16,pad:16},{grid:4,pad:64}];
+ {grid:16,pad:0},{grid:4,pad:16},{grid:4,pad:24},{grid:4,pad:32},{grid:16,pad:16}];
 const originals=[];
 function union(a,b){if(!a)return b;if(!b)return a;let x=Math.min(a.x,b.x),y=Math.min(a.y,b.y);return {x,y,w:Math.max(a.x+a.w,b.x+b.w)-x,h:Math.max(a.y+a.h,b.y+b.h)-y};}
 function split(r){
@@ -100,11 +100,14 @@ async function run(browser,base,canvas,round){
   const fourGridCorrection=result.results.reduce((n,r)=>n+r.rois.filter(t=>t.attempts[0].channels>0&&t.attempts[2].channels===0).length,0);
   const stillWrong4=result.results.reduce((n,r)=>n+r.rois.filter(t=>t.attempts[2].channels>0).length,0);
   const anyExactNonFull=result.results.some(r=>r.rois.some(t=>t.attempts.some(a=>a.channels===0&&(a.src.w*a.src.h)<canvas.w*canvas.h)));
+  const pad16Failures=result.results.reduce((n,r)=>n+r.rois.filter(t=>t.attempts[5].channels!==0).length,0);
+  const pad24Failures=result.results.reduce((n,r)=>n+r.rois.filter(t=>t.attempts[6].channels!==0).length,0);
   result.oldMismatch=oldMismatch;result.fourGridCorrection=fourGridCorrection;result.stillWrong4=stillWrong4;
-  result.status=oldMismatch>0&&anyExactNonFull&&result.results.every(r=>r.changedFull===0)?'PASS':'FAIL';
+  result.pad16Failures=pad16Failures;result.pad24Failures=pad24Failures;
+  result.status=oldMismatch>0&&anyExactNonFull&&pad16Failures===0&&result.results.every(r=>r.changedFull===0)?'PASS':'FAIL';
   writeFileSync(path.join(out,filename+'.json'),JSON.stringify(result,null,2)+'\n');
-  process.stdout.write(result.status+' '+filename+' baseline='+oldMismatch+' correctedByGrid4='+fourGridCorrection+' persistsGrid4='+stillWrong4+'\n');
-  return {status:result.status,canvas,round,baseline:oldMismatch,grid4:fourGridCorrection,persists:stillWrong4};
+  process.stdout.write(result.status+' '+filename+' baseline='+oldMismatch+' correctedByGrid4='+fourGridCorrection+' persistsGrid4='+stillWrong4+' pad16Failures='+pad16Failures+' pad24Failures='+pad24Failures+'\n');
+  return {status:result.status,canvas,round,baseline:oldMismatch,grid4:fourGridCorrection,persists:stillWrong4,pad16Failures,pad24Failures};
  }catch(e){
   writeFileSync(path.join(out,filename+'-error.json'),JSON.stringify({error:String(e),errors,result},null,2)+'\n');
   process.stderr.write('ERROR '+filename+' '+String(e)+'\n');return {status:'FAIL',error:String(e),canvas,round};
