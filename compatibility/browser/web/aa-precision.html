@@ -10,7 +10,8 @@ canvas{display:block;width:800px;height:500px}
 <script type="module">
 try {
   const { default: init, render_complex_probe, render_complex_full, render_complex_origin_trace,
-    render_complex_intermediate, intermediate_lines, intermediate_coverages,
+    render_complex_intermediate, render_complex_canonical,
+    intermediate_lines, intermediate_coverages,
     intermediate_truncated } = await import('./pfx_vello_complex.js');
   await init();
   const ctx = document.getElementById('output').getContext('2d', {willReadFrequently:true});
@@ -19,6 +20,7 @@ try {
     render:render_complex_probe,
     trace:render_complex_origin_trace,
     intermediate:render_complex_intermediate,
+    canonical:render_complex_canonical,
     traceLines:intermediate_lines,
     traceCoverage:intermediate_coverages,
     traceTruncated:intermediate_truncated,
