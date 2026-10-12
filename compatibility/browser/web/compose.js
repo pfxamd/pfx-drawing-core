@@ -6,6 +6,13 @@ const state=window.PFX_COMPOSITION={
   geometry:null,perspective:false,velloRenderMs:null,filamentInitMs:null,
   renderDurationsMs:[],frameIntervalsMs:[],gpuVersion:null
 };
+const params=new URLSearchParams(location.search);
+const requested=Number(params.get('stressFrames'));
+const targetFrames=params.has('stressFrames')&&Number.isInteger(requested)&&requested>=100&&requested<=1200?requested:100;
+const hideOverlay=params.get('overlay')==='hidden';
+state.targetFrames=targetFrames;
+state.overlayVisible=!hideOverlay;
+if(hideOverlay)document.querySelector('#hud').style.visibility='hidden';
 const started=performance.now();
 window.addEventListener('error',e=>state.errors.push(String(e.message)));
 window.addEventListener('unhandledrejection',e=>state.errors.push(String(e.reason)));
@@ -19,7 +26,9 @@ try {
   state.velloRenderMs=+(performance.now()-begin).toFixed(3);
   if(pixels.length!==800*500*4)throw Error('Unexpected Vello RGBA buffer size');
   const context=hud.getContext('2d',{willReadFrequently:true});
+  const uploadStart=performance.now();
   context.putImageData(new ImageData(new Uint8ClampedArray(pixels),800,500),0,0);
+  state.velloUploadMs=+(performance.now()-uploadStart).toFixed(3);
   const fill=context.getImageData(40,26,1,1).data;
   const clear=context.getImageData(400,350,1,1).data;
   if(fill[3]!==255||clear[3]!==0)throw Error('Vello RGBA alpha assertions failed');
@@ -83,6 +92,12 @@ try {
       renderer.setClearOptions({clearColor:[0,0.1,0.2,1],clear:true});
       const gl=canvas.getContext('webgl2');
       if(!gl)throw Error('WebGL2 context missing');
+      state.contextLosses=0;
+      canvas.addEventListener('webglcontextlost',event=>{
+        event.preventDefault();
+        state.contextLosses++;
+        state.errors.push('Unexpected WebGL context lost');
+      });
       state.gpuVersion=gl.getParameter(gl.VERSION);
       state.geometry='24-vertex, 36-index cube';
       state.perspective=true;
@@ -107,7 +122,7 @@ try {
           renderer.render(swapChain,view);
           state.renderDurationsMs.push(+(performance.now()-before).toFixed(3));
           state.frames++;
-          if(state.frames<100)requestAnimationFrame(draw);
+          if(state.frames<targetFrames)requestAnimationFrame(draw);
         }catch(error){state.errors.push('FILAMENT FRAME: '+String(error));}
       }
       requestAnimationFrame(draw);

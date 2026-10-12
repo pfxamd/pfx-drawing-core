@@ -1,0 +1,61 @@
+name: Browser 2D 3D stability and observational performance
+on:
+  push:
+    branches:
+      - experiment/browser-stability-performance
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+# Replay source-built artifacts only. Not the production renderer or a final engine decision.
+jobs:
+  browser-stability-performance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: pfx-source-browser-vello
+          run-id: 38183319164
+          github-token: ${{ github.token }}
+          path: artifacts/vello
+      - uses: actions/download-artifact@v4
+        with:
+          name: pfx-source-browser-filament
+          run-id: 38183319164
+          github-token: ${{ github.token }}
+          path: artifacts/filament
+      - name: Assemble pinned source-built browser artifacts on a local origin
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p artifacts/browser/web artifacts/browser/proof
+          cp compatibility/browser/web/* artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_overlay.js artifacts/browser/web/
+          cp artifacts/vello/web/pfx_vello_overlay_bg.wasm artifacts/browser/web/
+          cp artifacts/filament/web/filament.js artifacts/browser/web/
+          cp artifacts/filament/web/filament.wasm artifacts/browser/web/
+          cp artifacts/filament/web/triangle.filamat artifacts/browser/web/
+          npm install --no-save playwright@1.56.1 pngjs@7.0.0
+          npx playwright install --with-deps chromium
+      - name: Exercise 1200 renderer frames with DPR and browser lifecycle variations
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PFX_WEBROOT="$GITHUB_WORKSPACE/artifacts/browser/web" \
+          PFX_PROOF_DIR="$GITHUB_WORKSPACE/artifacts/browser/proof" \
+            node compatibility/browser/test-stability.cjs
+          test -s artifacts/browser/proof/stress-summary.json
+      - name: Preserve screenshots, timings and JavaScript heap observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pfx-browser-stability-performance
+          path: artifacts/browser/proof
+          if-no-files-found: ignore
