@@ -2,7 +2,7 @@
 // Conservative manually specified dirty rectangles; no GPU-sharing claims.
 use wasm_bindgen::prelude::*;
 use vello_cpu::{RenderContext, Resources, Pixmap, RasterizerSettings, RenderMode};
-use vello_cpu::{color::palette::css, kurbo::{Affine, BezPath, Rect}};
+use vello_cpu::{color::palette::css, kurbo::{Affine, BezPath, Rect, Stroke}};
 
 const FULL_W: u16 = 800;
 const FULL_H: u16 = 500;
@@ -234,4 +234,69 @@ pub fn intermediate_coverages() -> Vec<f32> {
 #[wasm_bindgen]
 pub fn intermediate_truncated() -> bool {
     vello_common::pfx_trace::truncated()
+}
+
+// Extended diagnostic only. Scene flags: 1 = filled Bézier paths,
+// 2 = stroked Bézier path, 4 = freeform clip on the scene. No feature is
+// enabled without a selected flag. All global geometry is identical between
+// full and independent dirty subregion rendering.
+#[wasm_bindgen]
+pub fn render_complex_extended(
+    canvas_width:u16, canvas_height:u16, frame:u32,
+    ox:u16, oy:u16, width:u16, height:u16,
+    scene:u8, zoom:f64, rotation:f64, dx:f64, dy:f64,
+    canonical:bool
+) -> Vec<u8> {
+    if canvas_width==0 || canvas_height==0 || width==0 || height==0 ||
+        (u32::from(ox)+u32::from(width)>u32::from(canvas_width)) ||
+        (u32::from(oy)+u32::from(height)>u32::from(canvas_height)) ||
+        !zoom.is_finite() || !(0.5..=2.0).contains(&zoom) ||
+        !rotation.is_finite() || !dx.is_finite() || !dy.is_finite() ||
+        scene & !7 != 0 || (scene & 3)==0 {
+        return Vec::new();
+    }
+    vello_common::pfx_trace::begin_extended(
+        ox,oy,canvas_width,canvas_height,canonical,false
+    );
+    let mut ctx=RenderContext::new(width,height);
+    let mut res=Resources::new();
+    let transform=Affine::translate((-f64::from(ox),-f64::from(oy)))
+        * Affine::translate((620.0+dx,240.0+dy))
+        * Affine::rotate(rotation)
+        * Affine::scale(zoom)
+        * Affine::translate((-620.0,-240.0));
+    ctx.set_transform(transform);
+    if scene & 4 != 0 {
+        let mut clip=BezPath::new();
+        clip.move_to((424.45,186.35));
+        clip.curve_to((445.2,123.15),(705.75,120.25),(773.65,188.85));
+        clip.curve_to((808.5,310.45),(663.5,362.75),(460.25,355.15));
+        clip.quad_to((411.2,312.25),(424.45,186.35));
+        clip.close_path();
+        ctx.push_clip_path(&clip);
+    }
+    if scene & 1 != 0 {
+        let t=f64::from(frame);
+        blob_a(&mut ctx,t,0.0,0.0,true);
+        blob_b(&mut ctx,t,0.0,0.0,true);
+    }
+    if scene & 2 != 0 {
+        let mut p=BezPath::new();
+        p.move_to((421.45,263.25));
+        p.curve_to((490.15,165.45),(590.25,355.65),(678.55,211.45));
+        p.quad_to((741.15,161.25),(788.75,320.35));
+        ctx.set_stroke(Stroke::new(12.25));
+        ctx.set_paint(css::MAGENTA);
+        ctx.stroke_path(&p);
+    }
+    if scene & 4 != 0 {ctx.pop_clip();}
+    ctx.flush();
+    let mut target=Pixmap::new(width,height);
+    ctx.render(&mut target,&mut res);
+    let mut data=Vec::with_capacity(usize::from(width)*usize::from(height)*4);
+    for px in target.data(){
+        data.extend_from_slice(&[px.r,px.g,px.b,px.a]);
+    }
+    vello_common::pfx_trace::end();
+    data
 }
