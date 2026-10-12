@@ -35,7 +35,7 @@
 | 20 | 54 | **52** | **40** |
 | **All 432 ROIs** | **154** | **130** | **102** |
 
-Other measured halo values: 32px failed in 130 ROIs; 64px failed in 106. No proposed halo 0/16/32/64/96 worked for all sampled radii/affine/mask/origin combinations. Radius 0 passed all 72 uniquely sampled regions across both contexts? Clarification: 36 radius-0 ROI checks per context pass and were repeated in two contexts; counts in the table are across both contexts.
+Other measured halo values: 32px failed in 130 ROIs; 64px failed in 106. No proposed halo 0/16/32/64/96 worked for all sampled radii/affine/mask/origin combinations. The radius-0 group contained 72 ROI checks across the six context/canvas runs and had no byte mismatches.
 
 **Important failure characteristic:** some radius-5.25 and radius-8 cases preserved thousands of changed channels even with a 96px globally phase-aligned halo. In these samples, changed-channel maxima were 2–3 byte values (not only 1). Other cases differed nonmonotonically with halo size. Therefore the data **cannot** be explained by mere insufficient filter radius padding; the exact internal source-layer/filter coordinate and numerical dependence must be traced. The previous successful 16px suite covered its tested scenes only, and remains valid within that narrower envelope.
 
@@ -53,6 +53,20 @@ An interleaved headless Chromium microbenchmark used the **same exact variable-r
 | 20 | No | 5.4 ms | **2.6 ms** |
 
 Timing values vary with GitHub runner load and individual scene content, and they do not include actual editor invalidation, compositing on-screen, GPU texture upload, or native multi-thread CPU graphics. **They apply only to these exact probes.** Other ROIs at the *same* radius failed pixel equality and thus must not use this partial route without further correction or an explicit full-frame correctness fallback.
+
+
+## Explicit fail-closed fallback reverified after falsification
+
+A separate [hash-guarded browser replay](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38286942733) used the **identical source-built WASM** from run 38286104070 (exact source/Cargo/trace/patch/browser Git blob hashes checked) after adding an independent `safe=true` verification step.
+
+- Each of the **130** ROI comparisons that failed with a 16px phase-aligned halo was re-rendered by the WASM export's **actual full-frame fallback + crop**.
+- Against independently rendered full-reference pixels: **0 mismatched channels in all 130 fallback crops**.
+- The 432-ROI diagnostic matrix retains all **130 known native partial failures**; nothing is hidden by tolerance changes or by marking an unsafe ROI as passing.
+- [Machine-readable fallback evidence](https://github.com/pfxamd/pfx-drawing-core/actions/runs/38286942733/artifacts/11764086232).
+
+This confirms the fallback implementation for the tested cases; it does **not** mean that arbitrary variable-radius blur is now efficiently dirty-rasterized. The browser job's `PASS` signifies diagnostics/fallback verification, not universal native ROI equality.
+
+**Performance reproducibility caveat:** repeated GitHub Actions runs varied substantially even for the same byte-exact configurations. In the guarded replay, full-frame medians ranged from **2.1 to 4.5 ms**, with the 34,496-pixel source medians **0.4 to 1.5 ms**, across the same six selected 800×500 cases. Comparisons must remain within one run and exact ROI; neither run provides production frame-time guarantees.
 
 ## Conclusions / safe next step
 
