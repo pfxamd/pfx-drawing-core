@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "kind": "core",
+  "product": "PFx Drawing Core",
+  "channel": "Development",
+  "baseVersion": "0.1.0-dev.0",
+  "baseline": "ab433d55c37317cfef17ae35aac4e1c80ffe6a1b",
+  "sourcePaths": [
+    "compatibility",
+    ".pfx",
+    ".github/workflows/release-metadata.yml"
+  ],
+  "jsonVersions": [],
+  "cargoVersions": [],
+  "cargoLocks": [],
+  "npmLocks": [],
+  "cargoNames": [],
+  "changelogPath": false,
+  "ignoreSubjects": [
+    "chore(release): sync core version metadata [skip ci]"
+  ]
+}

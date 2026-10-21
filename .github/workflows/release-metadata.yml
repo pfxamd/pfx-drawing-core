@@ -1,0 +1,34 @@
+name: PFx Drawing Core version metadata
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'compatibility/**'
+      - '.pfx/**'
+      - '.github/workflows/release-metadata.yml'
+  pull_request:
+    paths:
+      - 'compatibility/**'
+      - '.pfx/**'
+      - '.github/workflows/release-metadata.yml'
+permissions:
+  contents: read
+jobs:
+  release-metadata:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Synchronize source-derived version
+        run: node .pfx/release.mjs --sync
+      - name: Verify deterministic metadata
+        run: node .pfx/release.mjs --check
+      - name: Save generated version
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: node .pfx/release.mjs --publish
