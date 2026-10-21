@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "kind": "core",
+  "product": "PFx Drawing Core",
+  "channel": "Development",
+  "version": "0.1.0-dev.1",
+  "label": "Development 0.1.0-dev.1",
+  "commit": "61f349bae9d56eaeffb4c96c6a17dd53facc9916",
+  "sourceDate": "2026-10-21T21:57:54+01:00"
+}
